@@ -1,0 +1,33 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+graph TD
+    subgraph "geometry_msgs/Twist Message"
+        Twist[Twist Message]
+        Linear[linear: Vector3]
+        Angular[angular: Vector3]
+
+        Twist --> Linear
+        Twist --> Angular
+
+        Linear --> LX[x: float64<br/>forward/backward<br/>m/s]
+        Linear --> LY[y: float64<br/>left/right<br/>m/s]
+        Linear --> LZ[z: float64<br/>up/down<br/>m/s]
+
+        Angular --> AX[x: float64<br/>roll<br/>rad/s]
+        Angular --> AY[y: float64<br/>pitch<br/>rad/s]
+        Angular --> AZ[z: float64<br/>yaw<br/>rad/s]
+    end
+
+    subgraph "Example Values"
+        Example[Twist msg]
+        Example --> E1[linear.x = 0.5<br/>Move forward]
+        Example --> E2[linear.y = 0.0<br/>No sideways]
+        Example --> E3[linear.z = 0.0<br/>No vertical]
+        Example --> E4[angular.x = 0.0<br/>No roll]
+        Example --> E5[angular.y = 0.0<br/>No pitch]
+        Example --> E6[angular.z = 0.1<br/>Turn left]
+    end
+
+    style Twist fill:#ffe6e6
+    style Linear fill:#e6f3ff
+    style Angular fill:#e6ffe6
+    style Example fill:#fff9e6

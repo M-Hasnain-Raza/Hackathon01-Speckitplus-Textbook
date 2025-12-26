@@ -1,0 +1,24 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+flowchart TD
+    Start([Start Program]) --> Init[rclpy.init<br/>Initialize ROS 2]
+    Init --> CreateNode[Node 'my_node'<br/>Create node instance]
+    CreateNode --> CreateEntities[create_publisher<br/>create_subscription<br/>create_timer<br/>Create entities]
+    CreateEntities --> Spin{rclpy.spin<br/>Process callbacks}
+
+    Spin -->|Incoming Messages| Callbacks[Execute callback<br/>functions]
+    Callbacks --> Spin
+    Spin -->|Timer Events| Timers[Execute timer<br/>callbacks]
+    Timers --> Spin
+
+    Spin -->|Ctrl+C or<br/>Shutdown Signal| Destroy[node.destroy_node<br/>Clean up node]
+    Destroy --> Shutdown[rclpy.shutdown<br/>Shutdown ROS 2]
+    Shutdown --> End([End Program])
+
+    style Init fill:#e6f3ff
+    style CreateNode fill:#e6f3ff
+    style CreateEntities fill:#e6ffe6
+    style Spin fill:#ffe6e6
+    style Callbacks fill:#fff9e6
+    style Timers fill:#fff9e6
+    style Destroy fill:#ffe6e6
+    style Shutdown fill:#e6f3ff

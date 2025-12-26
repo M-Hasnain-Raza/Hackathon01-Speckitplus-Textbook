@@ -1,0 +1,28 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+sequenceDiagram
+    participant AI as AI Agent Node
+    participant Topic as ROS 2 Topic<br/>/left_arm/command
+    participant Controller as Joint Controller<br/>Node
+    participant Actuator as Physical<br/>Actuators
+
+    Note over AI,Actuator: Scenario: AI decides to raise left arm
+
+    Note over AI: 1. Process sensor data<br/>2. Make decision:<br/>"Raise left arm to 90°"
+
+    AI->>AI: Create JointState msg<br/>shoulder_pitch: 1.57 rad<br/>elbow: 1.57 rad
+
+    AI->>Topic: publish(JointState)
+    Note right of AI: Topic: /left_arm/command
+
+    Topic->>Controller: forward message
+    Note over Controller: 3. Receive command<br/>4. Calculate motor<br/>trajectories
+
+    Controller->>Actuator: Send motor commands<br/>via hardware interface
+
+    Note over Actuator: 5. Execute movement<br/>Move arm to target
+
+    Actuator-->>Controller: Position feedback
+    Controller-->>Topic: Publish current state
+    Topic-->>AI: AI monitors progress
+
+    Note over AI,Actuator: Command executed: Arm raised to 90°

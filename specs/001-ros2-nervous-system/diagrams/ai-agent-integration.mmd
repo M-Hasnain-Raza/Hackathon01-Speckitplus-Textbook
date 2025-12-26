@@ -1,0 +1,42 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+graph TB
+    subgraph "AI Agent Node"
+        Decision[AI Decision Logic<br/>Machine Learning<br/>Planning]
+        ROS_Interface[rclpy Interface<br/>Publishers/Subscribers]
+        Decision --> ROS_Interface
+    end
+
+    subgraph "ROS 2 Communication Layer"
+        T_Sensor["/camera/image"]
+        T_IMU["/imu/data"]
+        T_Cmd["/cmd_vel"]
+        T_Arm["/left_arm/command"]
+    end
+
+    subgraph "Robot Control Nodes"
+        Camera[Camera Node]
+        IMU[IMU Node]
+        Motor[Motor Controller]
+        Arm[Arm Controller]
+    end
+
+    Camera -->|publish| T_Sensor
+    IMU -->|publish| T_IMU
+    T_Sensor -->|subscribe| ROS_Interface
+    T_IMU -->|subscribe| ROS_Interface
+    ROS_Interface -->|publish| T_Cmd
+    ROS_Interface -->|publish| T_Arm
+    T_Cmd -->|subscribe| Motor
+    T_Arm -->|subscribe| Arm
+
+    Motor --> Actuators1[Motor Actuators]
+    Arm --> Actuators2[Arm Actuators]
+
+    style Decision fill:#ffe6e6
+    style ROS_Interface fill:#e6f3ff
+    style T_Sensor fill:#fff9e6
+    style T_IMU fill:#fff9e6
+    style T_Cmd fill:#fff9e6
+    style T_Arm fill:#fff9e6
+    style Actuators1 fill:#e6ffe6
+    style Actuators2 fill:#e6ffe6

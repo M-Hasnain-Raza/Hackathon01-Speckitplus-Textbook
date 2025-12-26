@@ -1,0 +1,21 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+sequenceDiagram
+    participant Client as Service Client<br/>(AI Agent)
+    participant Service as ROS 2 Service<br/>/query_battery_level
+    participant Server as Service Server<br/>(Battery Monitor)
+
+    Note over Client,Server: Synchronous, One-to-One Communication
+
+    Client->>Service: send_request()
+    Note right of Client: Request: {}
+
+    Service->>Server: forward request
+    Note over Server: Process request<br/>Read battery sensor<br/>Calculate percentage
+
+    Server->>Service: send_response()
+    Note left of Server: Response:<br/>battery_level = 85%
+
+    Service->>Client: return response
+    Note over Client: Block until<br/>response received
+
+    Note over Client: Process response<br/>Make decision based<br/>on battery level

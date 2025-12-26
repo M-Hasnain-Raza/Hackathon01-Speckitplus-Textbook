@@ -1,0 +1,45 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333','primaryBorderColor':'#666'}}}%%
+graph TB
+    subgraph "ROS 2 System"
+        AI[AI Decision Node]
+        Vision[Vision Processor Node]
+        IMU[IMU Sensor Node]
+        LeftArm[Left Arm Controller]
+        RightArm[Right Arm Controller]
+        Legs[Leg Controller]
+    end
+
+    subgraph "Communication Layer"
+        T1["/camera/image<br/>(topic)"]
+        T2["/imu/data<br/>(topic)"]
+        T3["/left_arm/command<br/>(topic)"]
+        T4["/right_arm/command<br/>(topic)"]
+        T5["/legs/command<br/>(topic)"]
+        S1["/query_state<br/>(service)"]
+    end
+
+    Vision -->|publish| T1
+    IMU -->|publish| T2
+    AI -->|subscribe| T1
+    AI -->|subscribe| T2
+    AI -->|publish| T3
+    AI -->|publish| T4
+    AI -->|publish| T5
+    AI -.request/response.-> S1
+    LeftArm -->|subscribe| T3
+    RightArm -->|subscribe| T4
+    Legs -->|subscribe| T5
+    LeftArm -.provide.-> S1
+
+    style AI fill:#ffe6e6
+    style Vision fill:#e6f3ff
+    style IMU fill:#e6f3ff
+    style LeftArm fill:#e6ffe6
+    style RightArm fill:#e6ffe6
+    style Legs fill:#e6ffe6
+    style T1 fill:#fff9e6
+    style T2 fill:#fff9e6
+    style T3 fill:#fff9e6
+    style T4 fill:#fff9e6
+    style T5 fill:#fff9e6
+    style S1 fill:#f0e6ff

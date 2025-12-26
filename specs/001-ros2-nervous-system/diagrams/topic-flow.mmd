@@ -1,0 +1,23 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+sequenceDiagram
+    participant Publisher as Publisher Node<br/>(AI Agent)
+    participant Topic as ROS 2 Topic<br/>/cmd_vel
+    participant Sub1 as Subscriber 1<br/>(Motor Controller)
+    participant Sub2 as Subscriber 2<br/>(Safety Monitor)
+
+    Note over Publisher,Sub2: Asynchronous, Many-to-Many Communication
+
+    Publisher->>Topic: publish(Twist message)
+    Note right of Publisher: linear.x = 0.5<br/>angular.z = 0.1
+
+    Topic->>Sub1: forward message
+    Topic->>Sub2: forward message
+
+    Note over Sub1: Process command<br/>Move motors
+    Note over Sub2: Check safety<br/>constraints
+
+    Publisher->>Topic: publish(Twist message)
+    Note right of Publisher: Continuous stream<br/>No waiting for response
+
+    Topic->>Sub1: forward message
+    Topic->>Sub2: forward message

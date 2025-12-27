@@ -1,0 +1,27 @@
+graph LR
+    subgraph Gazebo_Sim[Gazebo Simulation]
+        Phys[Physics Server<br/>Joint States, Poses]
+        Sensors[Sensor Plugins<br/>Camera, LiDAR]
+    end
+
+    subgraph ROS_2[ROS 2 Middleware]
+        Topics[ROS 2 Topics<br/>/joint_states<br/>/tf]
+        Bridge[ros_gz_bridge]
+    end
+
+    subgraph Unity_Scene[Unity Visualization]
+        TCP[ROS-TCP-Endpoint<br/>Message Subscriber]
+        Renderer[Unity Renderer<br/>3D Scene, Lighting]
+        Animator[Robot Animator<br/>Joint Synchronization]
+    end
+
+    Phys --> Bridge
+    Sensors --> Bridge
+    Bridge --> Topics
+    Topics --> TCP
+    TCP --> Animator
+    TCP --> Renderer
+
+    style Phys fill:#ffecb3
+    style Topics fill:#b3e5fc
+    style Renderer fill:#f8bbd0

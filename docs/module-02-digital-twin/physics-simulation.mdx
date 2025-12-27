@@ -1,0 +1,391 @@
+---
+id: physics-simulation
+title: "Physics Simulation in Gazebo"
+sidebar_label: "03: Physics"
+sidebar_position: 3
+description: "Master Gazebo's physics engines (ODE, Bullet, DART), configure simulation parameters, and understand collision dynamics and joint behaviors."
+keywords: [physics, ode, collision, joints, gravity, simulation]
+sources:
+  - "Open Robotics. (2023). Physics simulation. Gazebo. https://gazebosim.org/docs/fortress/physics"
+  - "Open Source Robotics Foundation. (n.d.). SDF specification 1.9. Retrieved December 28, 2025, from http://sdformat.org/spec?ver=1.9"
+  - "Open Robotics. (2023). SDF physics element. Gazebo. http://sdformat.org/spec?elem=physics"
+  - "Open Robotics. (2023). SDF joint element. Gazebo. http://sdformat.org/spec?elem=joint"
+learning_objectives:
+  - Compare physics engines (ODE, Bullet, DART)
+  - Configure physics step size and real-time factor
+  - Understand collision detection and joint dynamics
+prerequisites: ["gazebo-fundamentals"]
+estimated_time: "20 minutes"
+---
+
+# Physics Simulation in Gazebo
+
+In Section 2, you installed Gazebo and launched your first simulated robot. But what makes that simulation realistic? This section explores the physics engines that compute how robots move, collide with objects, and respond to forces—the foundation of accurate digital twins. By the end, you'll understand how to configure physics parameters to balance realism and performance for your AI agent development workflow.
+
+## 3.1 Physics Engines: ODE, Bullet, DART
+
+Gazebo supports three physics engines, each with different trade-offs between accuracy, speed, and feature support (Open Robotics, 2023, Physics section). Understanding these differences helps you choose the right engine for your use case.
+
+### ODE (Open Dynamics Engine) — Default
+
+**ODE** is Gazebo's default physics engine, providing a balance of performance and accuracy for most robotics applications (Open Robotics, 2023). ODE uses an iterative constraint solver that approximates contact forces, making it fast enough for real-time simulation on consumer hardware.
+
+**Strengths**:
+- **Fast computation**: Suitable for real-time simulation with multiple robots
+- **Stable joints**: Reliable performance for wheeled robots and simple manipulators
+- **Wide compatibility**: Supported across all Gazebo versions
+
+**Limitations**:
+- **Approximated contact dynamics**: May not accurately model deformable objects or complex friction
+- **Constraint drift**: Long kinematic chains (e.g., humanoid robots with many joints) can accumulate small errors over time
+
+**Best for**: Differential-drive robots (TurtleBot3), simple manipulators, AI agent training where approximate physics suffice.
+
+### Bullet — High-Fidelity Alternative
+
+**Bullet** is a physics engine used in game development and film, offering more accurate collision detection than ODE (Open Source Robotics Foundation, n.d., SDF Physics Element). Bullet supports soft body dynamics and more realistic friction models.
+
+**Strengths**:
+- **Accurate collisions**: Better handling of complex geometries and mesh-to-mesh contacts
+- **Soft body simulation**: Can model deformable objects (though this feature has limited Gazebo integration)
+- **Continuous collision detection**: Prevents fast-moving objects from passing through obstacles
+
+**Limitations**:
+- **Slower than ODE**: Approximately 20-30% performance overhead in typical simulations
+- **Less tested in robotics**: Fewer production deployments compared to ODE
+
+**Best for**: Scenarios requiring precise collision detection, such as grasping irregularly-shaped objects or navigating cluttered environments.
+
+### DART (Dynamic Animation and Robotics Toolkit) — Research-Grade
+
+**DART** is a research-oriented physics engine designed for robotics and biomechanics simulation, providing state-of-the-art accuracy for complex systems (Open Robotics, 2023). DART uses a velocity-based LCP (Linear Complementarity Problem) solver for constraint resolution.
+
+**Strengths**:
+- **High accuracy**: Best-in-class joint constraint satisfaction for humanoid robots and complex manipulators
+- **Inverse dynamics**: Supports analytical computation of joint torques for a given motion
+- **Stable long chains**: Minimal constraint drift even for robots with 20+ joints
+
+**Limitations**:
+- **Slower than ODE and Bullet**: 2-3x performance overhead for complex robots
+- **Limited soft body support**: Focuses on rigid body dynamics
+
+**Best for**: Research on legged locomotion (quadrupeds, humanoids), complex manipulation with long kinematic chains, sim2real scenarios requiring maximum physics fidelity.
+
+### Comparison Table
+
+| Feature | ODE | Bullet | DART |
+|---------|-----|--------|------|
+| **Real-time performance** | Excellent | Good | Moderate |
+| **Collision accuracy** | Moderate | High | High |
+| **Joint constraint fidelity** | Good | Good | Excellent |
+| **Large kinematic chains** | Fair | Good | Excellent |
+| **Deformable objects** | No | Limited | No |
+| **Production maturity** | Very High | Moderate | Research |
+
+**Recommendation**: Start with ODE (the default) for initial development. Switch to Bullet if collision accuracy is critical for your application (e.g., vision-based grasping). Use DART only for research projects requiring maximum fidelity in complex manipulators or legged robots.
+
+## 3.2 Configuring Physics Parameters
+
+Physics engines are configured in SDF (Simulation Description Format) world files using the `<physics>` element (Open Robotics, 2023, SDF Physics Element). Understanding key parameters lets you tune the simulation for your needs.
+
+### Physics Configuration in SDF
+
+Here's a typical physics configuration for Gazebo Fortress with ODE:
+
+```xml
+<!-- Gazebo world file: custom_world.sdf -->
+<sdf version="1.9">
+  <world name="custom_world">
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>1000</real_time_update_rate>
+    </physics>
+
+    <!-- Other world elements: models, lights, etc. -->
+  </world>
+</sdf>
+```
+
+### Key Parameters Explained
+
+**`max_step_size` (seconds)**:
+- **Definition**: Duration of each physics update step
+- **Default**: 0.001 (1 millisecond)
+- **Trade-off**: Smaller steps increase accuracy but reduce performance
+- **Example**: For high-speed robots or delicate manipulation, use 0.0005 (0.5ms). For training at scale, use 0.002 (2ms) to run faster than real-time.
+
+**`real_time_factor` (dimensionless)**:
+- **Definition**: Target ratio of simulation time to wall-clock time
+- **Default**: 1.0 (real-time simulation)
+- **Interpretation**: RTF = 1.0 means 1 second of simulation takes 1 second of real time. RTF = 2.0 means simulation runs twice as fast.
+- **Use case**: For RL training (Section 12), you want RTF greater than 1.0 to accumulate experience faster.
+
+**`real_time_update_rate` (Hz)**:
+- **Definition**: How many physics updates per simulated second
+- **Default**: 1000 (matches `max_step_size` of 0.001)
+- **Relationship**: Should equal `1 / max_step_size` for consistent time stepping
+
+### Measuring Real-Time Factor (RTF)
+
+Gazebo reports actual RTF during simulation. You can measure it programmatically:
+
+```bash
+# Monitor RTF while simulation runs
+gz topic -e -t /stats
+```
+
+Output shows:
+```
+real_time_factor: 1.25
+```
+
+This means your simulation is running 25% faster than real-time—1 second of simulation completes in 0.8 seconds of wall time. High RTF is desirable for parallel RL training (Section 12) but may indicate physics is oversimplified.
+
+### Tuning for Performance vs. Accuracy
+
+**High Accuracy (slow)**:
+```xml
+<max_step_size>0.0005</max_step_size>  <!-- 2000 steps/sec -->
+<real_time_update_rate>2000</real_time_update_rate>
+```
+Use for: Precise grasping, contact-rich manipulation, sim2real transfer validation.
+
+**Balanced (default)**:
+```xml
+<max_step_size>0.001</max_step_size>   <!-- 1000 steps/sec -->
+<real_time_update_rate>1000</real_time_update_rate>
+```
+Use for: General AI agent development, navigation, most perception tasks.
+
+**High Performance (less accurate)**:
+```xml
+<max_step_size>0.002</max_step_size>   <!-- 500 steps/sec -->
+<real_time_update_rate>500</real_time_update_rate>
+```
+Use for: Parallel RL training, large-scale multi-robot experiments.
+
+## 3.3 Collision Detection and Contact Dynamics
+
+Collision detection determines when objects touch, while contact dynamics computes forces at contact points. Understanding this helps debug unexpected robot behaviors.
+
+### Collision Geometries
+
+Every link in a robot model can have two representations (Open Source Robotics Foundation, n.d., SDF Link Element):
+
+1. **Visual geometry**: Detailed meshes for rendering (what you see)
+2. **Collision geometry**: Simplified shapes for physics (what affects dynamics)
+
+**Why separate?**: Physics computations are expensive for complex meshes. Using simple collision shapes (boxes, cylinders, spheres) dramatically improves performance.
+
+**Example from TurtleBot3 URDF**:
+
+```xml
+<link name="base_link">
+  <!-- Visual: detailed mesh for rendering -->
+  <visual>
+    <geometry>
+      <mesh filename="turtlebot3_waffle_body.dae"/>
+    </geometry>
+  </visual>
+
+  <!-- Collision: simple box approximation -->
+  <collision>
+    <geometry>
+      <box size="0.28 0.30 0.07"/>  <!-- Width x Depth x Height -->
+    </geometry>
+  </collision>
+</link>
+```
+
+The visual mesh has thousands of triangles for realistic appearance, but the collision box is just 6 faces—much faster for contact detection.
+
+### Contact Forces and Friction
+
+When objects collide, Gazebo computes contact forces using parameters defined in SDF surface properties (Open Robotics, 2023, SDF Surface Element):
+
+```xml
+<collision name="collision">
+  <surface>
+    <friction>
+      <ode>
+        <mu>0.8</mu>      <!-- Coefficient of friction (0 = ice, 1 = rubber) -->
+        <mu2>0.8</mu2>    <!-- Friction in perpendicular direction -->
+      </ode>
+    </friction>
+    <contact>
+      <ode>
+        <kp>1e6</kp>      <!-- Contact stiffness (higher = less penetration) -->
+        <kd>1.0</kd>      <!-- Contact damping (higher = less bounce) -->
+      </ode>
+    </contact>
+  </surface>
+</collision>
+```
+
+**Common friction values**:
+- Ice: `mu = 0.01`
+- Wood on wood: `mu = 0.4`
+- Rubber on concrete: `mu = 1.0`
+
+**Debugging tip**: If your robot slides unexpectedly, check friction coefficients. If objects penetrate each other, increase `kp` (contact stiffness).
+
+## 3.4 Joint Types and Dynamics
+
+Joints connect links and define how they move relative to each other. Gazebo supports several joint types, each with different degrees of freedom (Open Robotics, 2023, SDF Joint Element).
+
+### Common Joint Types
+
+**Revolute (hinge joint)**:
+- 1 degree of freedom: rotation around axis
+- Example: Robot arm elbow, wheel axle
+- Limits: Min/max angle
+
+**Prismatic (slider joint)**:
+- 1 degree of freedom: translation along axis
+- Example: Linear actuator, elevator mechanism
+- Limits: Min/max position
+
+**Continuous (unbounded revolute)**:
+- 1 degree of freedom: rotation without limits
+- Example: Wheel spinning indefinitely
+- Use case: Differential-drive robots like TurtleBot3
+
+**Fixed (rigid connection)**:
+- 0 degrees of freedom: permanently attached
+- Example: Sensor mount, rigid robot structure
+
+### Joint Configuration Example
+
+Here's a revolute joint for a robot arm with position limits and damping:
+
+```xml
+<joint name="shoulder_joint" type="revolute">
+  <parent>base_link</parent>
+  <child>upper_arm_link</child>
+  <axis>
+    <xyz>0 1 0</xyz>  <!-- Rotation axis (Y-axis) -->
+    <limit>
+      <lower>-1.57</lower>  <!-- -90 degrees -->
+      <upper>1.57</upper>   <!-- +90 degrees -->
+      <effort>100</effort>  <!-- Max torque (N·m) -->
+      <velocity>2.0</velocity>  <!-- Max angular velocity (rad/s) -->
+    </limit>
+    <dynamics>
+      <damping>0.7</damping>  <!-- Joint friction/damping -->
+    </dynamics>
+  </axis>
+</joint>
+```
+
+**Key parameters**:
+- **`lower/upper`**: Joint limits prevent unrealistic configurations
+- **`effort`**: Maximum torque the joint can apply (prevents infinite forces)
+- **`damping`**: Simulates friction and energy dissipation
+
+### Joint Control in ROS 2
+
+For AI agents (Module 1, Section 7), you control joints by publishing to appropriate topics. For position-controlled joints:
+
+```bash
+# Example: Control TurtleBot3 wheels via velocity commands
+ros2 topic pub /cmd_vel geometry_msgs/Twist "{linear: {x: 0.2}, angular: {z: 0.0}}"
+```
+
+Gazebo's `DiffDrive` plugin converts these `Twist` messages into joint velocities for the left and right wheels (continuous joints).
+
+## 3.5 Gravity and Environmental Forces
+
+Gravity is defined at the world level and affects all models (Open Robotics, 2023, SDF Physics Element):
+
+```xml
+<physics name="default_physics" type="ode">
+  <gravity>0 0 -9.81</gravity>  <!-- Earth gravity (m/s²) in Z-axis -->
+  <!-- Other physics parameters -->
+</physics>
+```
+
+**Standard values**:
+- **Earth**: `0 0 -9.81` (downward Z-axis)
+- **Moon**: `0 0 -1.62`
+- **Mars**: `0 0 -3.71`
+- **Microgravity** (space station): `0 0 -0.001`
+
+**Use case**: Testing planetary rover AI agents by changing gravity to match target environment (Mars, Moon).
+
+### Wind and External Forces
+
+While Gazebo doesn't have built-in wind, you can apply forces programmatically via ROS 2 services (covered in Section 12). This is useful for testing drone stability or legged robot balance under perturbations.
+
+## 3.6 Observing Physics Behavior
+
+Hands-on experimentation helps build intuition for physics parameters.
+
+### Exercise 1: Gravity Modification
+
+1. Create a simple world file with a falling box:
+
+```xml
+<sdf version="1.9">
+  <world name="gravity_test">
+    <physics name="default_physics" type="ode">
+      <gravity>0 0 -9.81</gravity>
+      <max_step_size>0.001</max_step_size>
+    </physics>
+
+    <model name="box">
+      <pose>0 0 5 0 0 0</pose>  <!-- 5 meters above ground -->
+      <link name="box_link">
+        <collision name="collision">
+          <geometry>
+            <box><size>1 1 1</size></box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box><size>1 1 1</size></box>
+          </geometry>
+        </visual>
+        <inertial>
+          <mass>1.0</mass>
+        </inertial>
+      </link>
+    </model>
+  </world>
+</sdf>
+```
+
+2. Launch with different gravity values and observe fall time:
+
+```bash
+gz sim gravity_test.sdf
+```
+
+3. Modify `<gravity>` to `0 0 -1.62` (Moon) and re-launch—the box falls much slower.
+
+### Exercise 2: Friction Exploration
+
+Modify the ground plane friction in the TurtleBot3 world:
+
+1. Open the world file (typically in `/opt/ros/humble/share/turtlebot3_gazebo/worlds/`)
+2. Find the ground plane `<collision>` element
+3. Change `mu` from `0.8` to `0.01` (ice-like)
+4. Launch simulation and command robot to move—it will slip dramatically
+
+This demonstrates how physical parameters affect AI agent performance: your obstacle avoidance algorithm may fail if it assumes high friction but deploys on slippery floors.
+
+## Summary
+
+Physics simulation is the foundation of realistic digital twins. Key takeaways:
+
+1. **Three physics engines** (ODE, Bullet, DART) offer trade-offs between speed and accuracy. Start with ODE (default) for most applications.
+2. **Physics step size** (`max_step_size`) balances accuracy and performance. Smaller steps increase fidelity but reduce real-time factor.
+3. **Collision geometries** should be simplified shapes (boxes, cylinders) for performance, even if visual meshes are detailed.
+4. **Joint types** (revolute, prismatic, continuous, fixed) define robot kinematics. Joint limits and damping prevent unrealistic behaviors.
+5. **Environmental parameters** (gravity, friction) significantly affect robot dynamics and should match your deployment target.
+
+In the next section, you'll learn about sensor simulation—how Gazebo generates LiDAR, camera, and IMU data that your AI agents use for perception.
+
+---
+
+**Next**: [Section 04: Sensor Simulation Overview](./sensor-simulation-overview) — Understand Gazebo's sensor plugin architecture and noise models.

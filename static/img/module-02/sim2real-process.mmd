@@ -1,0 +1,19 @@
+graph TD
+    A[Develop Algorithm<br/>in Simulation] --> B[Train/Test in Gazebo<br/>with Noise Models]
+    B --> C[Validate in Simulation<br/>Domain Randomization]
+    C --> D{Simulation<br/>Performance OK?}
+    D -->|No| E[Debug/Refine Algorithm]
+    E --> B
+    D -->|Yes| F[Deploy to Hardware<br/>Initial Testing]
+    F --> G[Measure Reality Gap<br/>Sensor Comparison]
+    G --> H{Gap<br/>Acceptable?}
+    H -->|No| I[Update Sim Parameters<br/>System Identification]
+    I --> B
+    H -->|Yes| J[Production Deployment<br/>Monitor Performance]
+    J --> K[Collect Edge Cases]
+    K --> L[Augment Simulation<br/>New Scenarios]
+    L --> B
+
+    style A fill:#e1f5ff
+    style J fill:#c8e6c9
+    style I fill:#ffccbc

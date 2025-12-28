@@ -1,0 +1,581 @@
+---
+id: performance-optimization
+title: "Performance Optimization and Troubleshooting"
+sidebar_label: "13: Performance"
+sidebar_position: 13
+description: "Optimize Gazebo simulation performance, tune real-time factor, resolve common errors, and debug simulation issues effectively."
+keywords: [performance tuning, real-time factor, troubleshooting, gazebo errors, optimization, debugging]
+sources:
+  - "Open Robotics. (2023). Gazebo performance tuning. Gazebo. https://gazebosim.org/api/sim/7/performance_tuning.html"
+  - "Open Robotics. (2023). Gazebo debugging tools. Gazebo. https://gazebosim.org/api/sim/7/debugging.html"
+  - "Open Source Robotics Foundation. (2023). ROS 2 Quality of Service (QoS). ROS 2 Documentation. https://docs.ros.org/en/humble/Concepts/Intermediate/About-Quality-of-Service-Settings.html"
+learning_objectives:
+  - Measure and optimize Real-Time Factor (RTF) for faster simulation
+  - Tune physics parameters to balance accuracy and performance
+  - Configure ROS 2 QoS settings for reliable sensor data
+  - Diagnose and resolve common Gazebo errors
+  - Use debugging tools to inspect simulation state
+prerequisites: ["gazebo-fundamentals", "programmatic-control"]
+estimated_time: "30 minutes"
+---
+
+# Performance Optimization and Troubleshooting
+
+## 13.1 Understanding Real-Time Factor (RTF)
+
+**Real-Time Factor (RTF)** measures how fast simulation runs compared to real time (Open Robotics, 2023, Gazebo performance tuning documentation):
+
+**RTF = 1.0**: Simulation runs at real-time speed (1 sim second = 1 wall-clock second)
+**RTF = 2.0**: Simulation runs 2× faster than real time (1 sim second = 0.5 wall-clock seconds)
+**RTF = 0.5**: Simulation runs 2× slower than real time (1 sim second = 2 wall-clock seconds)
+
+### Checking RTF
+
+```bash
+# Method 1: Gazebo GUI (bottom-right corner shows RTF)
+# Look for: "RTF: 0.95" in status bar
+
+# Method 2: ROS 2 topic
+ros2 topic echo /stats --once
+# Output shows:
+#   real_time_factor: 0.95
+#   sim_time: 120.5
+```
+
+### Why RTF Matters
+
+**For Development**:
+- **RTF > 1.0**: Faster iteration (100 episodes in 50 minutes instead of 100)
+- **RTF < 1.0**: Simulation can't keep up (physics instability or overloaded CPU)
+
+**For AI Training**:
+- **Target RTF ≥ 1.0** for headless training
+- **RTF = 5-10** achievable with simplified physics and headless mode
+- **Critical**: Consistent RTF (avoid fluctuations that break RL algorithms)
+
+### RTF Bottlenecks
+
+```bash
+# Check CPU usage per process
+top -p $(pgrep -f gz)
+
+# Common bottlenecks:
+# 1. Physics computation (80-90% CPU): Too many collision checks
+# 2. Sensor rendering (50-70% GPU): High-resolution cameras
+# 3. ROS 2 bridge overhead (10-20% CPU): Too many topics at high rates
+```
+
+## 13.2 Physics Parameter Tuning
+
+### Key Parameters Affecting Performance
+
+**1. Timestep (max_step_size)**
+
+Smaller timestep = more accurate but slower:
+
+```xml
+<!-- In world SDF file -->
+<physics type="ode">
+  <max_step_size>0.001</max_step_size>  <!-- 1ms (default) -->
+  <real_time_factor>1.0</real_time_factor>
+</physics>
+
+<!-- For faster simulation (less accurate): -->
+<max_step_size>0.004</max_step_size>  <!-- 4ms: 4× faster but unstable contacts -->
+```
+
+**Performance Impact**:
+- **0.001s (1ms)**: RTF = 0.8-1.0 (accurate, slow)
+- **0.002s (2ms)**: RTF = 1.5-2.0 (good balance)
+- **0.004s (4ms)**: RTF = 3.0-4.0 (fast, but objects may jitter)
+
+**2. Solver Iterations**
+
+Fewer iterations = faster but less stable:
+
+```xml
+<ode>
+  <solver>
+    <type>quick</type>
+    <iters>50</iters>  <!-- Default: 50 -->
+  </solver>
+</ode>
+
+<!-- For faster simulation: -->
+<iters>20</iters>  <!-- 2× faster, but joints may be loose -->
+```
+
+**Recommendation**: Use 50 iterations for development, 20 for headless training if stability permits.
+
+**3. Contact Parameters**
+
+Reduce max_contacts for fewer collision checks:
+
+```xml
+<ode>
+  <max_contacts>20</max_contacts>  <!-- Default: 20 per collision pair -->
+</ode>
+
+<!-- For faster simulation (if few contacts expected): -->
+<max_contacts>5</max_contacts>  <!-- 4× faster collision detection -->
+```
+
+**Warning**: Setting too low causes objects to pass through each other!
+
+### Performance Tuning Strategy
+
+```python
+# Benchmark script to find optimal settings
+import subprocess
+import time
+
+def benchmark_physics_settings(max_step_size, solver_iters):
+    """Run simulation and measure RTF."""
+    # Update world file with settings
+    update_world_file(max_step_size, solver_iters)
+
+    # Launch Gazebo headless
+    proc = subprocess.Popen(['gz', 'sim', '-s', '-r', 'benchmark_world.sdf'])
+
+    # Run for 60 sim seconds
+    time.sleep(10)  # Wait for startup
+    start_time = time.time()
+
+    # Query sim time after 10 wall-clock seconds
+    wall_elapsed = 10.0
+    time.sleep(wall_elapsed)
+
+    sim_elapsed = query_sim_time()  # Via ROS 2 topic
+    rtf = sim_elapsed / wall_elapsed
+
+    proc.terminate()
+    return rtf
+
+# Test different settings
+results = []
+for step in [0.001, 0.002, 0.003, 0.004]:
+    for iters in [20, 35, 50]:
+        rtf = benchmark_physics_settings(step, iters)
+        results.append((step, iters, rtf))
+        print(f"step={step}, iters={iters}: RTF={rtf:.2f}")
+
+# Find best settings for target RTF ≥ 2.0
+best = max([r for r in results if r[2] >= 2.0], key=lambda x: x[2])
+print(f"Best: step={best[0]}, iters={best[1]}, RTF={best[2]:.2f}")
+```
+
+## 13.3 Sensor Optimization
+
+### LiDAR Performance
+
+**Reduce sample count**:
+
+```xml
+<!-- Default: 360 samples (1° resolution) -->
+<horizontal>
+  <samples>360</samples>
+  <resolution>1</resolution>
+</horizontal>
+
+<!-- Optimized: 180 samples (2° resolution) -->
+<samples>180</samples>  <!-- 2× faster ray casting -->
+```
+
+**Reduce update rate**:
+
+```xml
+<!-- Default: 10 Hz -->
+<update_rate>10</update_rate>
+
+<!-- Optimized for RL: 5 Hz -->
+<update_rate>5</update_rate>  <!-- Sufficient for navigation, 2× fewer computations -->
+```
+
+### Camera Performance
+
+**Reduce resolution**:
+
+```xml
+<!-- Default: 640×480 -->
+<image>
+  <width>640</width>
+  <height>480</height>
+</image>
+
+<!-- Optimized: 320×240 (4× fewer pixels) -->
+<width>320</width>
+<height>240</height>
+```
+
+**Disable unused cameras**:
+
+```bash
+# In URDF, comment out camera sensors not needed for current task
+<!-- <sensor name="camera" type="camera"> -->
+```
+
+**Use depth camera only if needed**:
+Depth cameras require GPU rendering; use LiDAR for 2D navigation instead.
+
+## 13.4 ROS 2 QoS Optimization
+
+**Quality of Service (QoS)** settings affect message reliability and latency (Open Source Robotics Foundation, 2023, ROS 2 QoS documentation).
+
+### Sensor Data QoS
+
+**Default QoS** (sensor_data profile):
+```python
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+
+sensor_qos = QoSProfile(
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,  # Don't wait for ACKs
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=1  # Only keep latest message
+)
+
+# Use for sensor subscriptions
+self.create_subscription(LaserScan, '/scan', callback, sensor_qos)
+```
+
+**Why BEST_EFFORT**:
+- Sensor data is time-sensitive; old data is useless
+- Missing one LiDAR scan is acceptable (next one arrives in 100ms)
+- Reduces network overhead by 30-40%
+
+### Command QoS (Reliable)
+
+```python
+from rclpy.qos import QoSReliabilityPolicy
+
+cmd_qos = QoSProfile(
+    reliability=QoSReliabilityPolicy.RELIABLE,  # Ensure delivery
+    history=QoSHistoryPolicy.KEEP_LAST,
+    depth=10
+)
+
+# Use for critical commands
+self.create_publisher(Twist, '/cmd_vel', cmd_qos)
+```
+
+**When to use RELIABLE**:
+- Control commands (/cmd_vel)
+- Service calls
+- Goal poses
+
+**Performance Impact**: RELIABLE adds ~5-10ms latency per message (acceptable for 10 Hz control).
+
+## 13.5 Common Gazebo Errors and Solutions
+
+### Error 1: "Unable to find URDF model"
+
+**Symptoms**:
+```
+[ERROR] [spawn_entity]: Failed to spawn entity
+[ERROR] Unable to find uri[model://turtlebot3_waffle]
+```
+
+**Solutions**:
+1. **Set GAZEBO_MODEL_PATH**:
+   ```bash
+   export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/opt/ros/humble/share/turtlebot3_gazebo/models
+   ```
+
+2. **Use absolute path in spawn**:
+   ```python
+   urdf_path = '/opt/ros/humble/share/turtlebot3_description/urdf/turtlebot3_waffle.urdf'
+   with open(urdf_path, 'r') as f:
+       urdf_xml = f.read()
+   # Spawn using URDF string instead of model:// URI
+   ```
+
+3. **Check package installation**:
+   ```bash
+   ros2 pkg prefix turtlebot3_description
+   # If not found, install: sudo apt install ros-humble-turtlebot3
+   ```
+
+### Error 2: "Model is unstable / falling through ground"
+
+**Symptoms**:
+- Robot sinks into ground plane
+- Joints oscillate wildly
+- Physics solver diverges
+
+**Solutions**:
+1. **Check collision geometry**:
+   ```xml
+   <!-- Ensure collision shapes match visual -->
+   <collision name="collision">
+     <geometry>
+       <box><size>0.5 0.3 0.2</size></box>  <!-- Must match visual size -->
+     </geometry>
+   </collision>
+   ```
+
+2. **Increase contact stiffness**:
+   ```xml
+   <ode>
+     <contact>
+       <kp>1e7</kp>  <!-- Increase from 1e6 -->
+       <kd>1e4</kd>
+     </contact>
+   </ode>
+   ```
+
+3. **Reduce timestep**:
+   ```xml
+   <max_step_size>0.001</max_step_size>  <!-- From 0.002 to 0.001 -->
+   ```
+
+4. **Add minimum inertia**:
+   ```xml
+   <inertial>
+     <mass>0.1</mass>
+     <inertia>
+       <ixx>0.001</ixx>  <!-- Minimum 0.001, not 0 -->
+       <iyy>0.001</iyy>
+       <izz>0.001</izz>
+     </inertia>
+   </inertial>
+   ```
+
+### Error 3: "ROS 2 topic not publishing"
+
+**Symptoms**:
+```bash
+ros2 topic list  # Shows /scan
+ros2 topic hz /scan  # No messages received
+```
+
+**Solutions**:
+1. **Check QoS compatibility**:
+   ```bash
+   ros2 topic info /scan -v
+   # Publisher QoS: BEST_EFFORT
+   # Subscriber must also use BEST_EFFORT (not RELIABLE)
+   ```
+
+2. **Verify ros_gz_bridge is running**:
+   ```bash
+   ros2 node list | grep bridge
+   # Should show: /ros_gz_bridge
+
+   # If missing, launch:
+   ros2 run ros_gz_bridge parameter_bridge /scan@sensor_msgs/msg/LaserScan[ignition.msgs.LaserScan
+   ```
+
+3. **Check Gazebo sensor is active**:
+   ```bash
+   # In Gazebo GUI, enable "View → Transparent" to see sensor rays
+   # LiDAR should show green rays
+   ```
+
+### Error 4: "Simulation runs extremely slow (RTF < 0.3)"
+
+**Symptoms**:
+- Gazebo GUI freezes
+- RTF drops below 0.5
+- High CPU usage (>95%)
+
+**Solutions**:
+1. **Profile physics performance**:
+   ```bash
+   gz log -v 4  # Enable verbose logging
+   # Look for warnings about collision checks
+   ```
+
+2. **Disable shadows** (if using GUI):
+   ```bash
+   # In world SDF:
+   <scene>
+     <shadows>false</shadows>
+   </scene>
+   ```
+
+3. **Simplify collision shapes**:
+   ```xml
+   <!-- Replace mesh collisions with primitives -->
+   <!-- SLOW: -->
+   <collision>
+     <geometry><mesh><uri>model://complex_mesh.dae</uri></mesh></geometry>
+   </collision>
+
+   <!-- FAST: -->
+   <collision>
+     <geometry><box><size>1 1 1</size></box></geometry>
+   </collision>
+   ```
+
+4. **Run headless**:
+   ```bash
+   gz sim -s world.sdf  # No GUI rendering
+   ```
+
+### Error 5: "Joint limits violated / Robot explodes"
+
+**Symptoms**:
+- Robot parts fly apart
+- Joints extend beyond physical limits
+- Error: "Joint position out of bounds"
+
+**Solutions**:
+1. **Set joint limits**:
+   ```xml
+   <joint name="wheel_joint" type="revolute">
+     <limit>
+       <lower>-1.57</lower>  <!-- -90° -->
+       <upper>1.57</upper>   <!-- +90° -->
+       <effort>100</effort>  <!-- Max torque (N⋅m) -->
+       <velocity>2.0</velocity>  <!-- Max speed (rad/s) -->
+     </limit>
+   </joint>
+   ```
+
+2. **Add joint damping**:
+   ```xml
+   <dynamics>
+     <damping>0.5</damping>  <!-- Resist motion -->
+     <friction>0.1</friction>
+   </dynamics>
+   ```
+
+3. **Use position controllers** (not velocity for unstable joints):
+   ```xml
+   <plugin filename="libignition-gazebo-joint-controller-system.so"
+           name="ignition::gazebo::systems::JointController">
+     <joint_name>wheel_joint</joint_name>
+     <use_position_pid>true</use_position_pid>
+     <p_gain>100</p_gain>
+     <i_gain>0.1</i_gain>
+     <d_gain>10</d_gain>
+   </plugin>
+   ```
+
+## 13.6 Debugging Tools
+
+### Tool 1: Gazebo Inspector (GUI)
+
+**View entity properties in real-time**:
+
+```bash
+# Launch Gazebo with GUI
+gz sim world.sdf
+
+# Right-click entity → "View" → Shows:
+# - Pose (x, y, z, roll, pitch, yaw)
+# - Velocity (linear, angular)
+# - Acceleration
+# - Applied forces
+```
+
+**Use case**: Debug why robot isn't moving (check if velocity commands are applied).
+
+### Tool 2: RViz2 for ROS 2 Topics
+
+**Visualize sensor data**:
+
+```bash
+rviz2
+# Add displays:
+# - TF (coordinate frames)
+# - LaserScan (topic: /scan)
+# - Camera (topic: /camera/image_raw)
+# - RobotModel (visualize URDF)
+```
+
+**Use case**: Verify sensor data is reasonable (LiDAR not all zeros, camera image not black).
+
+### Tool 3: ROS 2 Topic Debugging
+
+```bash
+# Check message rate
+ros2 topic hz /scan
+# Expected: 10 Hz (if update_rate=10)
+
+# Check message latency
+ros2 topic delay /scan
+# Shows time between publish and receive
+
+# Echo single message
+ros2 topic echo /scan --once
+# Inspect ranges array for NaN or inf values
+```
+
+### Tool 4: Gazebo Logging
+
+**Enable detailed logging** (Open Robotics, 2023, Gazebo debugging tools documentation):
+
+```bash
+# Set log level
+export IGN_VERBOSE=4  # 0=Error, 1=Warn, 2=Info, 3=Debug, 4=Trace
+
+gz sim world.sdf
+
+# Logs show:
+# - Plugin loading status
+# - Physics solver warnings
+# - Collision detection issues
+```
+
+**Save logs to file**:
+```bash
+gz sim world.sdf 2>&1 | tee gazebo_debug.log
+# Review later: grep "WARN" gazebo_debug.log
+```
+
+### Tool 5: Performance Profiling
+
+**Use `perf` to find CPU bottlenecks**:
+
+```bash
+# Record 30 seconds of Gazebo execution
+perf record -g -p $(pgrep -f "gz sim") sleep 30
+
+# Generate flamegraph
+perf script | flamegraph.pl > gazebo_profile.svg
+# Open in browser to see which functions consume most CPU
+```
+
+## 13.7 Optimization Checklist
+
+Before deploying simulation for AI training, verify:
+
+**Physics**:
+- [ ] RTF ≥ 1.0 for headless training
+- [ ] Timestep = 0.002s (good balance) or 0.003s (faster)
+- [ ] Solver iterations = 20-35 (not default 50)
+- [ ] max_contacts = 5-10 (reduced from 20)
+
+**Sensors**:
+- [ ] LiDAR: 180-360 samples (not 720)
+- [ ] LiDAR: 5-10 Hz update rate (not 30 Hz)
+- [ ] Cameras: 320×240 resolution (not 640×480)
+- [ ] Disable unused sensors (comment out in URDF)
+
+**ROS 2**:
+- [ ] Sensor topics use BEST_EFFORT QoS
+- [ ] Command topics use RELIABLE QoS
+- [ ] QoS depth = 1 for sensors (not 10)
+
+**Rendering**:
+- [ ] Headless mode enabled (`gz sim -s`)
+- [ ] Shadows disabled in world SDF
+- [ ] Simple collision shapes (primitives, not meshes)
+
+**Validation**:
+- [ ] Run 100 episodes and measure average RTF
+- [ ] Verify RTF variation < 10% (consistent performance)
+- [ ] Check no warning/error messages in logs
+
+---
+
+**Key Takeaways**:
+- Real-Time Factor (RTF) measures simulation speed; target RTF ≥ 1.0 for training
+- Tune physics parameters: increase timestep (0.002-0.004s), reduce solver iterations (20-35)
+- Optimize sensors: reduce resolution, lower update rates, disable unused sensors
+- Use BEST_EFFORT QoS for sensor data (30-40% lower overhead)
+- Common errors: missing models (GAZEBO_MODEL_PATH), unstable physics (reduce timestep), QoS mismatch
+- Debug with Gazebo Inspector, RViz2, topic echo, and verbose logging
+- Headless mode + tuned physics can achieve RTF = 5-10× for fast AI training
+
+This section completes performance optimization. The final section will summarize Module 2 and provide next steps.

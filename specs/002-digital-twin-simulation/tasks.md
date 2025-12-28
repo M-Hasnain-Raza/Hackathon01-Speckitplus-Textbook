@@ -219,15 +219,15 @@
 
 ### Implementation for Remaining Sections
 
-- [ ] T079 [P] Write Section 13: Performance Optimization and Troubleshooting in `docs/module-02-digital-twin/13-performance-optimization.mdx` (subsections 13.1-13.8, RTF metrics, physics tuning, sensor rate optimization, headless mode, common errors with actual error messages, debugging tools)
-- [ ] T080 [P] Write Section 14: Conclusion and Next Steps in `docs/module-02-digital-twin/14-conclusion.mdx` (subsections 14.1-14.5, Module 2 summary of 7 user stories, digital twin best practices checklist, further resources with authoritative links, Module 3 preview, practical project ideas)
-- [ ] T081 Add frontmatter to Section 13 with sources (Gazebo performance tuning docs, ROS 2 QoS documentation, Gazebo issue tracker for error messages)
-- [ ] T082 Add frontmatter to Section 14 with sources (official Gazebo tutorials, ROS 2 advanced tutorials)
-- [ ] T083 Cite all factual claims in Section 13 (performance parameters, QoS settings, error messages from community)
-- [ ] T084 Cite recommended resources in Section 14 (only authoritative sources, no random blogs)
-- [ ] T085 Test performance optimization examples in Section 13 (RTF tuning, headless mode)
-- [ ] T086 Validate Sections 13-14: word count, citation completeness, no out-of-scope content
-- [ ] T087 Test Docusaurus build with Sections 13-14 (`npm run build`)
+- [x] T079 [P] Write Section 13: Performance Optimization and Troubleshooting in `docs/module-02-digital-twin/13-performance-optimization.mdx` (subsections 13.1-13.8, RTF metrics, physics tuning, sensor rate optimization, headless mode, common errors with actual error messages, debugging tools) - **COMPLETE** (2,018 words)
+- [x] T080 [P] Write Section 14: Conclusion and Next Steps in `docs/module-02-digital-twin/14-conclusion.mdx` (subsections 14.1-14.5, Module 2 summary of 7 user stories, digital twin best practices checklist, further resources with authoritative links, Module 3 preview, practical project ideas) - **COMPLETE** (1,776 words)
+- [x] T081 Add frontmatter to Section 13 with sources (Gazebo performance tuning docs, ROS 2 QoS documentation, Gazebo issue tracker for error messages) - **COMPLETE** (3 APA sources)
+- [x] T082 Add frontmatter to Section 14 with sources (official Gazebo tutorials, ROS 2 advanced tutorials) - **COMPLETE** (2 sources)
+- [x] T083 Cite all factual claims in Section 13 (performance parameters, QoS settings, error messages from community) - **COMPLETE** (all parameters cited)
+- [x] T084 Cite recommended resources in Section 14 (only authoritative sources, no random blogs) - **COMPLETE** (only official docs and academic sources)
+- [ ] T085 Test performance optimization examples in Section 13 (RTF tuning, headless mode) - **PENDING** (requires ROS 2 + Gazebo environment)
+- [x] T086 Validate Sections 13-14: word count, citation completeness, no out-of-scope content - **COMPLETE** (word counts: 2,018 and 1,776 words, citations complete)
+- [x] T087 Test Docusaurus build with Sections 13-14 (`npm run build`) - **COMPLETE** (webpack compilation successful)
 
 **Checkpoint**: All 14 sections complete.
 

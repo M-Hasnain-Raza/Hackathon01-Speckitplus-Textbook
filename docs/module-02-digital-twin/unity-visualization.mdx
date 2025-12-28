@@ -1,0 +1,303 @@
+---
+id: unity-visualization
+title: "Unity for High-Fidelity Visualization"
+sidebar_label: "09: Unity Basics"
+sidebar_position: 9
+description: "Use Unity for photorealistic robot visualization, HRI scenarios, and complementary rendering alongside Gazebo physics."
+keywords: [unity, visualization, rendering, hri, ros-tcp-connector]
+sources:
+  - "Unity Technologies. (2023). ROS-TCP-Connector (Version 0.7.0) [Computer software]. GitHub. https://github.com/Unity-Technologies/ROS-TCP-Connector"
+  - "Unity Technologies. (2023). Unity User Manual 2021.3 (LTS). Unity Documentation. https://docs.unity3d.com/2021.3/Documentation/Manual/"
+  - "Unity Technologies. (2023). Unity Personal licensing. Unity. https://unity.com/products/unity-personal"
+learning_objectives:
+  - Understand when to use Unity vs Gazebo for visualization
+  - Install Unity 2021.3 LTS with ROS-TCP-Connector
+  - Set up Unity project for ROS 2 integration
+  - Import robot models (URDF) into Unity scenes
+prerequisites: ["gazebo-fundamentals"]
+estimated_time: "40 minutes + Unity installation"
+---
+
+# Unity for High-Fidelity Visualization
+
+## 9.1 Gazebo vs. Unity: Complementary Roles
+
+Gazebo and Unity serve **complementary roles** in robotics development. Gazebo excels at physics simulation, while Unity specializes in photorealistic rendering and human-robot interaction (HRI) scenarios.
+
+### Decision Matrix: When to Use Each Tool
+
+| Use Case | Gazebo | Unity | Hybrid (Both) |
+|----------|--------|-------|---------------|
+| **Physics-based simulation** (collision, dynamics) | ✅ Primary | ❌ Limited | Use Gazebo physics |
+| **Sensor simulation** (LiDAR, depth cameras) | ✅ Excellent | ⚠️ Custom scripting | Use Gazebo sensors |
+| **Photorealistic rendering** (materials, lighting, post-processing) | ❌ Basic | ✅ Excellent | Use Unity visuals |
+| **Human-robot interaction** (avatars, gestures, social scenarios) | ❌ Not supported | ✅ Excellent | Use Unity HRI |
+| **Virtual reality (VR)** integration | ❌ Not supported | ✅ Native support | Use Unity VR |
+| **Fast iteration** (quick world building, testing) | ✅ SDF-based | ⚠️ Scene setup | Use Gazebo |
+| **Performance** (real-time factor, headless) | ✅ Optimized | ⚠️ GPU-heavy | Use Gazebo headless |
+
+**Key Insight**: Use Gazebo for **physics simulation** (accurate dynamics, sensor data), and Unity for **visualization** (photorealism, HRI, VR). The two can run simultaneously via ROS 2 topic bridging (covered in Section 10).
+
+### Typical Workflows
+
+**Workflow 1: Gazebo-Only**
+- Develop and test perception/control algorithms
+- Train reinforcement learning agents
+- Validate robot behavior with realistic sensor noise
+- **Advantage**: No Unity setup needed, faster iteration
+
+**Workflow 2: Unity-Only (Rare)**
+- Create HRI demonstrations (e.g., service robots in retail)
+- Build VR teleoperation interfaces
+- Visualize pre-recorded robot trajectories
+- **Limitation**: Physics and sensor simulation require custom implementation
+
+**Workflow 3: Hybrid Gazebo + Unity**
+- Run Gazebo for physics and sensor simulation (headless or GUI)
+- Stream robot state (joint positions) and sensor data to Unity via ROS 2
+- Render photorealistic visualization in Unity for presentations or VR
+- **Advantage**: Best of both worlds—accurate physics + stunning visuals
+
+## 9.2 Unity Strengths for Robotics
+
+Unity is a professional game engine with features valuable for robotics (Unity Technologies, 2023, Unity User Manual):
+
+### 1. Photorealistic Rendering
+- **High Dynamic Range (HDR)** lighting with global illumination
+- **Physically-Based Rendering (PBR)** materials (metallic, roughness, normals)
+- **Post-processing effects**: bloom, ambient occlusion, depth of field, motion blur
+- **Real-time shadows** and reflections
+
+**Use Case**: Demonstrating robots in realistic environments (homes, offices, hospitals) for stakeholder presentations or HRI research.
+
+### 2. Asset Ecosystem
+- **Unity Asset Store**: 100,000+ pre-made 3D models (furniture, characters, vehicles)
+- **Free humanoid avatars** for HRI scenarios (crowd simulation, social navigation)
+- **Environment packs**: photorealistic interiors (kitchens, living rooms, warehouses)
+
+**Advantage**: Build realistic environments in hours instead of weeks.
+
+### 3. VR/AR Support
+- Native support for **VR headsets** (Meta Quest, HTC Vive, Valve Index)
+- **XR Interaction Toolkit**: teleportation, object grabbing, UI interactions
+- **AR Foundation**: overlay robots onto real-world camera feeds (mobile AR)
+
+**Use Case**: Immersive robot teleoperation or training simulations.
+
+### 4. Cross-Platform Deployment
+- Build for Windows, macOS, Linux, WebGL (browser-based), iOS, Android
+- **WebGL**: Share robot demos via web link (no installation required)
+
+### 5. Scripting Flexibility
+- C# scripting for custom robot behaviors, UI, and camera controls
+- **Unity Timeline**: author cinematic sequences (robot demonstrations)
+
+## 9.3 Installing Unity and ROS-TCP-Connector
+
+### Step 1: Install Unity Hub and Unity Editor
+
+**Unity Hub** is the launcher for managing Unity versions and projects.
+
+```bash
+# Download Unity Hub from https://unity.com/download
+# Install Unity Hub (GUI installer for Windows/macOS/Linux)
+
+# Launch Unity Hub and sign in (free Unity Personal account)
+# Go to "Installs" → "Install Editor"
+# Select Unity 2021.3 LTS (Long-Term Support)
+# Modules to install:
+#  - Linux Build Support (if on Windows/macOS and targeting Linux)
+#  - Documentation (optional)
+```
+
+**Recommended Version**: Unity 2021.3 LTS (Unity Technologies, 2023, ROS-TCP-Connector documentation specifies 2020.2+ compatibility, but 2021.3 LTS provides long-term stability).
+
+**Licensing**: Unity Personal is **free** for individuals and organizations with less than $100k revenue (Unity Technologies, 2023, Unity Personal licensing documentation). No runtime fees for robotics applications.
+
+### Step 2: Create a New Unity Project
+
+```bash
+# In Unity Hub:
+# 1. Click "New Project"
+# 2. Select template: "3D (URP)" (Universal Render Pipeline for better graphics)
+# 3. Project name: "RobotVisualization"
+# 4. Location: Choose directory
+# 5. Click "Create Project"
+```
+
+**Wait 2-5 minutes** for Unity to initialize the project and import default assets.
+
+### Step 3: Install ROS-TCP-Connector via Package Manager
+
+**ROS-TCP-Connector** is Unity's official ROS 2 integration package (Unity Technologies, 2023, ROS-TCP-Connector GitHub repository).
+
+**In Unity Editor**:
+1. Go to **Window → Package Manager**
+2. Click **+ (plus icon)** → **Add package from git URL**
+3. Paste: `https://github.com/Unity-Technologies/ROS-TCP-Connector.git?path=/com.unity.robotics.ros-tcp-connector`
+4. Click **Add**
+5. Wait for package installation (~1 minute)
+
+**Verify Installation**:
+- Go to **Robotics → ROS Settings** (new menu item should appear)
+- You should see ROS IP and port configuration options
+
+## 9.4 Unity Project Setup for ROS 2 Integration
+
+### Configure ROS-TCP-Connector Settings
+
+1. **Open ROS Settings**: **Robotics → ROS Settings**
+2. **Set ROS IP Address**:
+   - If Unity and ROS 2 are on the **same machine**: `127.0.0.1` (localhost)
+   - If on **different machines**: Enter ROS 2 machine's IP (e.g., `192.168.1.100`)
+3. **Set ROS Port**: `10000` (default for ROS-TCP-Endpoint server)
+4. **Protocol**: Select **ROS 2** (not ROS 1)
+5. **Serializer**: Keep default (Unity's built-in)
+
+**Save** settings (File → Save Project).
+
+### Install ROS-TCP-Endpoint (Python Server)
+
+On your **ROS 2 machine** (can be same machine or remote):
+
+```bash
+# Navigate to ROS 2 workspace
+cd ~/ros2_ws/src
+
+# Clone ROS-TCP-Endpoint repository
+git clone https://github.com/Unity-Technologies/ROS-TCP-Endpoint.git
+
+# Install dependencies
+cd ~/ros2_ws
+rosdep install --from-paths src --ignore-src -r -y
+
+# Build the package
+colcon build --packages-select ros_tcp_endpoint
+
+# Source workspace
+source install/setup.bash
+```
+
+### Launch ROS-TCP-Endpoint Server
+
+```bash
+# Start the TCP server (listens for Unity connections on port 10000)
+ros2 run ros_tcp_endpoint default_server_endpoint --ros-args -p ROS_IP:=0.0.0.0
+```
+
+**Expected Output**:
+```
+[INFO] Starting server on 0.0.0.0:10000
+```
+
+**Keep this running** in a terminal—Unity will connect to this server to send/receive ROS 2 messages.
+
+## 9.5 Importing Robot Models into Unity
+
+Unity can import robot models in **URDF** format (the same format used in Gazebo and ROS 2).
+
+### Install URDF Importer Package
+
+**In Unity Editor**:
+1. **Window → Package Manager**
+2. **+ → Add package from git URL**
+3. Paste: `https://github.com/Unity-Technologies/URDF-Importer.git?path=/com.unity.robotics.urdf-importer`
+4. Click **Add**
+
+### Import a Robot URDF
+
+**Example: Import TurtleBot3 URDF**
+
+1. **Get TurtleBot3 URDF**:
+   ```bash
+   # On ROS 2 machine, locate TurtleBot3 description package
+   ros2 pkg prefix turtlebot3_description
+   # Example output: /opt/ros/humble/share/turtlebot3_description
+
+   # Copy URDF to Unity project
+   # Unity Project: Assets/URDF/turtlebot3/
+   # Copy: turtlebot3_description/urdf/turtlebot3_waffle.urdf
+   # Copy: turtlebot3_description/meshes/ (entire folder)
+   ```
+
+2. **In Unity Editor**:
+   - **Assets → Create → Folder** → Name it `URDF`
+   - Drag the `.urdf` file and `meshes/` folder into `Assets/URDF/turtlebot3/`
+
+3. **Import URDF**:
+   - Right-click the `.urdf` file in Unity Project view
+   - Select **Import Robot from Selected URDF file**
+   - Unity will create a GameObject hierarchy matching the URDF structure
+
+4. **Position Robot**:
+   - Drag the robot GameObject into your scene
+   - Set **Transform → Position**: (0, 0, 0)
+   - Set **Transform → Rotation**: (0, 0, 0)
+
+**Verify**: You should see the TurtleBot3 model in the Scene view with wheels, chassis, and sensors.
+
+### Assign Materials (Optional)
+
+URDF imports may have default gray materials. To improve appearance:
+
+1. **Create PBR Materials**:
+   - **Assets → Create → Material**
+   - Name: `RobotChassisMaterial`
+   - Set **Albedo** (base color), **Metallic**, **Smoothness**
+
+2. **Apply to Robot Meshes**:
+   - Expand robot hierarchy in Hierarchy view
+   - Find mesh objects (e.g., `base_link`, `wheel_left_link`)
+   - Drag material onto mesh in Scene view
+
+## 9.6 Creating Realistic Environments
+
+Unity excels at creating photorealistic environments using the **Asset Store**:
+
+### Import Free Environment Assets
+
+1. **Open Asset Store**: **Window → Asset Store** (or visit https://assetstore.unity.com)
+2. **Search**: "office interior" or "warehouse"
+3. **Download Free Pack**: Example: "Realistic Office Interior" (check license for commercial use)
+4. **Import to Project**: Click "Import" in Unity Package Manager
+
+### Add Environment to Scene
+
+1. **Drag environment prefab** into Hierarchy view
+2. **Position robot** inside the environment (adjust Transform)
+3. **Add lighting**:
+   - **GameObject → Light → Directional Light** (for sunlight through windows)
+   - Adjust **Intensity** and **Color** for mood
+
+### Optimize Scene for Real-Time
+
+- **Bake Lighting**: **Window → Rendering → Lighting → Generate Lighting** (pre-compute shadows for performance)
+- **Occlusion Culling**: Hide objects not visible to camera (Unity docs: Occlusion Culling)
+
+## 9.7 Practical Exercise: Unity Visualization Setup
+
+**Objective**: Set up Unity to visualize a robot in a realistic environment.
+
+### Steps
+
+1. **Create Unity project** with 3D (URP) template
+2. **Install ROS-TCP-Connector** via Package Manager
+3. **Configure ROS Settings**: Set ROS IP to `127.0.0.1`, port `10000`, protocol `ROS 2`
+4. **Install URDF Importer** package
+5. **Import TurtleBot3 URDF** (or any robot URDF available)
+6. **Download free environment asset** (e.g., "Simple Office Interior Free")
+7. **Place robot in environment** and adjust camera angle
+8. **Test Play Mode**: Click Play button (top center) to enter runtime
+
+**Expected Result**: You should see the robot model in a photorealistic environment. In Section 10, we'll connect this to Gazebo to animate the robot based on physics simulation.
+
+---
+
+**Key Takeaways**:
+- Unity complements Gazebo: use Gazebo for physics, Unity for photorealistic visuals and HRI
+- Unity 2021.3 LTS is free (Personal license) and supports ROS 2 via ROS-TCP-Connector
+- Import robot URDFs directly into Unity using URDF Importer package
+- Leverage Unity Asset Store for realistic environments (offices, warehouses, outdoor scenes)
+- Hybrid workflow: Gazebo physics → ROS 2 topics → Unity visualization
+
+Next, we'll integrate Gazebo and Unity to synchronize robot state in real-time.

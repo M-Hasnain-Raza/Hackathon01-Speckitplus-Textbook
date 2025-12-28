@@ -1,0 +1,26 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333'}}}%%
+graph TD
+    Base[Base Link<br/>link: base_link<br/>Fixed to torso]
+
+    Base -->|Shoulder Joint<br/>joint: shoulder_joint<br/>type: revolute<br/>axis: Y<br/>limits: -90° to +90°| UpperArm
+
+    UpperArm[Upper Arm Link<br/>link: upper_arm_link<br/>length: 0.3m]
+
+    UpperArm -->|Elbow Joint<br/>joint: elbow_joint<br/>type: revolute<br/>axis: Y<br/>limits: 0° to +135°| Forearm
+
+    Forearm[Forearm Link<br/>link: forearm_link<br/>length: 0.25m]
+
+    Forearm -->|Wrist Joint<br/>joint: wrist_joint<br/>type: revolute<br/>axis: Z<br/>limits: -180° to +180°| Hand
+
+    Hand[Hand Link<br/>link: hand_link<br/>Gripper attached]
+
+    style Base fill:#ffe6e6
+    style UpperArm fill:#e6f3ff
+    style Forearm fill:#e6ffe6
+    style Hand fill:#fff9e6
+
+    subgraph "Legend"
+        L1[Links = Rigid Bodies]
+        L2[Joints = Connections]
+        L3[Revolute = Rotational]
+    end

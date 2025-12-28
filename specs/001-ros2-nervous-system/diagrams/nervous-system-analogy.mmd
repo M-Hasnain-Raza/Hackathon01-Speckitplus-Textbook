@@ -1,0 +1,22 @@
+%%{init: {'theme':'base', 'themeVariables': { 'primaryColor':'#f0f0f0','primaryTextColor':'#333','primaryBorderColor':'#666','lineColor':'#666','secondaryColor':'#e0e0e0','tertiaryColor':'#d0d0d0'}}}%%
+flowchart TD
+    subgraph "Biological Nervous System"
+        Brain[🧠 Brain<br/>Decision Making] --> Nerves[⚡ Nervous System<br/>Communication Layer]
+        Nerves --> Muscles[💪 Muscles<br/>Physical Action]
+    end
+
+    subgraph "Robotic System"
+        AI[🤖 AI Agent<br/>Decision Making] --> ROS2[🔗 ROS 2<br/>Communication Layer]
+        ROS2 --> Actuators[⚙️ Robot Actuators<br/>Physical Action]
+    end
+
+    Brain -.analogous to.-> AI
+    Nerves -.analogous to.-> ROS2
+    Muscles -.analogous to.-> Actuators
+
+    style Brain fill:#ffe6e6
+    style Nerves fill:#e6f3ff
+    style Muscles fill:#e6ffe6
+    style AI fill:#ffe6e6
+    style ROS2 fill:#e6f3ff
+    style Actuators fill:#e6ffe6

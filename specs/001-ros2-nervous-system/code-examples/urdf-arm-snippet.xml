@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<!--
+  URDF Arm Snippet Example
+  Simple humanoid arm with shoulder and elbow joints
+-->
+<robot name="humanoid_arm">
+
+  <!-- Base Link (attached to robot torso) -->
+  <link name="base_link"/>
+
+  <!-- Upper Arm Link -->
+  <link name="upper_arm_link"/>
+
+  <!-- Shoulder Joint: Connects base to upper arm (revolute) -->
+  <joint name="shoulder_joint" type="revolute">
+    <parent link="base_link"/>
+    <child link="upper_arm_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>  <!-- Rotate around Y axis -->
+    <!-- Joint limits: position (rad), velocity (rad/s), effort (Nm) -->
+    <limit lower="-1.57" upper="1.57" effort="100" velocity="1.0"/>
+  </joint>
+
+  <!-- Forearm Link -->
+  <link name="forearm_link"/>
+
+  <!-- Elbow Joint: Connects upper arm to forearm (revolute) -->
+  <joint name="elbow_joint" type="revolute">
+    <parent link="upper_arm_link"/>
+    <child link="forearm_link"/>
+    <origin xyz="0.3 0 0" rpy="0 0 0"/>  <!-- 0.3m along X from upper arm -->
+    <axis xyz="0 1 0"/>  <!-- Rotate around Y axis -->
+    <!-- Elbow bends 0° to 135° (0 to 2.35 rad) -->
+    <limit lower="0" upper="2.35" effort="100" velocity="1.0"/>
+  </joint>
+
+</robot>

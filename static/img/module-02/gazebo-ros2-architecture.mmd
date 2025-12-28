@@ -1,0 +1,28 @@
+graph LR
+    subgraph Gazebo
+        GS[Gazebo Server<br/>Physics Engine]
+        GP[Sensor Plugins<br/>LiDAR, Camera, IMU]
+        GM[Model Plugins<br/>Actuator Control]
+    end
+
+    subgraph ROS_2[ROS 2 Network]
+        Bridge[ros_gz_bridge<br/>Topic Translator]
+        Topics[ROS 2 Topics<br/>/scan, /camera, /cmd_vel]
+    end
+
+    subgraph User_Code[User Applications]
+        Nav[Navigation Stack]
+        Perception[Perception Pipeline]
+        Control[Control Algorithms]
+    end
+
+    GP --> Bridge
+    GM <--> Bridge
+    Bridge <--> Topics
+    Topics <--> Nav
+    Topics <--> Perception
+    Topics <--> Control
+
+    style GS fill:#ffecb3
+    style Bridge fill:#c5e1a5
+    style Topics fill:#b3e5fc

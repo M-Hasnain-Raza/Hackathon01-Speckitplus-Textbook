@@ -1,0 +1,15 @@
+graph TD
+    A[Design Robot Model<br/>URDF/SDF] --> B[Simulate in Gazebo<br/>Physics + Sensors]
+    B --> C[Test AI Agent<br/>Perception + Control]
+    C --> D{Meets Requirements?}
+    D -->|No| E[Refine Model/Parameters]
+    E --> B
+    D -->|Yes| F[Deploy to Hardware]
+    F --> G[Collect Real-World Data]
+    G --> H{Reality Gap?}
+    H -->|Yes| I[Update Simulation<br/>Domain Randomization]
+    I --> B
+    H -->|No| J[Production Deployment]
+
+    style A fill:#e1f5ff
+    style J fill:#c8e6c9

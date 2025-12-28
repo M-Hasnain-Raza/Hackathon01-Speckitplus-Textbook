@@ -3,8 +3,522 @@ id: custom-worlds
 title: "Building Custom Simulation Worlds"
 sidebar_label: "08: Custom Worlds"
 sidebar_position: 8
+description: "Create custom Gazebo worlds with terrains, obstacles, lighting, and models for robot navigation and testing scenarios."
+keywords: [world, sdf, terrain, lighting, models, environment]
+sources:
+  - "Open Source Robotics Foundation. (n.d.). SDF specification 1.9. Retrieved December 28, 2025, from http://sdformat.org/spec?ver=1.9"
+  - "Open Robotics. (2023). Gazebo Fuel model repository. Gazebo. https://app.gazebosim.org/fuel"
+  - "Open Robotics. (2023). SDF world element. Gazebo. http://sdformat.org/spec?elem=world"
+  - "Open Robotics. (2023). Lighting in Gazebo. Gazebo. https://gazebosim.org/api/rendering/7/lighting.html"
+learning_objectives:
+  - Author SDF world files from scratch
+  - Add ground planes, terrains, and obstacles
+  - Import models from Gazebo Fuel database
+  - Configure lighting for realistic environments
+  - Create custom navigation challenge worlds
+prerequisites: ["physics-simulation"]
+estimated_time: "30 minutes"
 ---
 
 # Building Custom Simulation Worlds
 
-*This section is under construction. Content will be added in Phase 6.*
+## 8.1 SDF World File Structure
+
+Gazebo worlds are defined using **SDF (Simulation Description Format)**, an XML-based format that describes complete simulation environments (Open Source Robotics Foundation, n.d., SDF specification documentation). A world file specifies:
+
+- **Physics engine configuration** (covered in Section 03)
+- **Scene elements** (lighting, sky, fog)
+- **Models** (robots, obstacles, terrain)
+- **Plugins** (environmental effects, custom behaviors)
+
+### Minimal World File Template
+
+```xml
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="my_custom_world">
+
+    <!-- Physics configuration -->
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Scene (visual settings) -->
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>  <!-- RGBA ambient light -->
+      <background>0.7 0.7 0.7 1</background>  <!-- Sky color -->
+    </scene>
+
+    <!-- Lighting -->
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <!-- Models (ground plane, obstacles, robots) -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+  </world>
+</sdf>
+```
+
+**Key Elements** (Open Robotics, 2023, SDF world element documentation):
+- **`<world name>`**: Unique identifier for the world
+- **`<physics>`**: Physics engine configuration (step size, RTF)
+- **`<scene>`**: Visual appearance (ambient light, background color)
+- **`<light>`**: Light sources (directional, point, spot)
+- **`<include>`** or **`<model>`**: Objects in the world
+
+### Loading Custom Worlds
+
+```bash
+# Launch Gazebo with custom world file
+gz sim my_world.sdf
+
+# Or via ROS 2 launch file (Python):
+# import os
+# from ament_index_python.packages import get_package_share_directory
+# world_path = os.path.join(get_package_share_directory('my_pkg'), 'worlds', 'my_world.sdf')
+# gz_args = ['-r', world_path]
+# Node(package='ros_gz_sim', executable='create', arguments=gz_args, ...)
+```
+
+## 8.2 Adding Ground Planes and Terrain
+
+### Ground Plane (Flat Surface)
+
+The simplest world contains a flat ground plane:
+
+```xml
+<model name="ground_plane">
+  <static>true</static>  <!-- Non-moving object -->
+  <link name="link">
+    <collision name="collision">
+      <geometry>
+        <plane>
+          <normal>0 0 1</normal>  <!-- Plane normal (pointing up) -->
+          <size>100 100</size>    <!-- 100m x 100m -->
+        </plane>
+      </geometry>
+    </collision>
+    <visual name="visual">
+      <geometry>
+        <plane>
+          <normal>0 0 1</normal>
+          <size>100 100</size>
+        </plane>
+      </geometry>
+      <material>
+        <ambient>0.8 0.8 0.8 1</ambient>
+        <diffuse>0.8 0.8 0.8 1</diffuse>
+      </material>
+    </visual>
+  </link>
+</model>
+```
+
+### Terrain (Heightmap)
+
+For outdoor scenarios, use a **heightmap** (grayscale image where pixel brightness = elevation):
+
+```xml
+<model name="terrain">
+  <static>true</static>
+  <link name="link">
+    <collision name="collision">
+      <geometry>
+        <heightmap>
+          <uri>file://terrain_heightmap.png</uri>  <!-- 8-bit grayscale PNG -->
+          <size>100 100 10</size>  <!-- X, Y size (m), max Z height (m) -->
+          <pos>0 0 0</pos>
+        </heightmap>
+      </geometry>
+    </collision>
+    <visual name="visual">
+      <geometry>
+        <heightmap>
+          <uri>file://terrain_heightmap.png</uri>
+          <size>100 100 10</size>
+          <texture>
+            <diffuse>file://grass_texture.jpg</diffuse>
+            <normal>file://grass_normal.jpg</normal>
+            <size>10</size>  <!-- Texture tiling (m) -->
+          </texture>
+        </heightmap>
+      </geometry>
+    </visual>
+  </link>
+</model>
+```
+
+**Heightmap Tips**:
+- Use 512×512 or 1024×1024 PNG images for smooth terrain
+- Black pixels (0) = lowest elevation, white pixels (255) = max elevation
+- `<size>` Z value scales the height range (e.g., 10 = 0-10m elevation)
+
+## 8.3 Importing Models from Gazebo Model Database
+
+Gazebo provides a free model repository called **Gazebo Fuel** with hundreds of pre-made models (robots, furniture, buildings, vehicles) (Open Robotics, 2023, Gazebo Fuel documentation).
+
+### Browsing Models
+
+Visit https://app.gazebosim.org/fuel to browse categories:
+- **Robots**: TurtleBot3, Clearpath Husky, quadcopters
+- **Structures**: walls, doors, ramps, stairs
+- **Props**: chairs, tables, traffic cones, barrels
+- **Environments**: warehouses, offices, outdoor scenes
+
+### Including Fuel Models in Worlds
+
+Use the model's **Fuel URI** (found on the model page):
+
+```xml
+<!-- Example: Import a traffic cone -->
+<include>
+  <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Construction Cone</uri>
+  <name>cone_1</name>
+  <pose>2 0 0 0 0 0</pose>  <!-- X Y Z Roll Pitch Yaw -->
+</include>
+
+<!-- Example: Import multiple obstacles -->
+<include>
+  <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cinder Block</uri>
+  <name>block_1</name>
+  <pose>3 1 0 0 0 0</pose>
+</include>
+
+<include>
+  <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Cinder Block</uri>
+  <name>block_2</name>
+  <pose>3 -1 0 0 0 0</pose>
+</include>
+```
+
+**Key Points**:
+- Each `<include>` must have a unique `<name>` (even if using the same model multiple times)
+- `<pose>` specifies position (x, y, z) and orientation (roll, pitch, yaw in radians)
+- Models are downloaded and cached locally on first use
+
+### Local Model Database
+
+You can also reference models installed locally in `~/.gazebo/models/`:
+
+```xml
+<include>
+  <uri>model://ground_plane</uri>  <!-- Looks in ~/.gazebo/models/ground_plane -->
+</include>
+```
+
+## 8.4 Creating Custom Models
+
+For obstacles not available in Fuel, create custom models using SDF:
+
+### Simple Box Obstacle
+
+```xml
+<model name="wall_segment">
+  <static>true</static>
+  <pose>5 0 0.5 0 0 0</pose>  <!-- Position: 5m forward, 0.5m up -->
+
+  <link name="link">
+    <collision name="collision">
+      <geometry>
+        <box>
+          <size>0.2 3.0 1.0</size>  <!-- Width Depth Height (m) -->
+        </box>
+      </geometry>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <box>
+          <size>0.2 3.0 1.0</size>
+        </box>
+      </geometry>
+      <material>
+        <ambient>0.5 0.5 0.5 1</ambient>
+        <diffuse>0.7 0.7 0.7 1</diffuse>
+        <specular>0.1 0.1 0.1 1</specular>
+      </material>
+    </visual>
+  </link>
+</model>
+```
+
+### Cylinder Pillar
+
+```xml
+<model name="pillar">
+  <static>true</static>
+  <pose>-2 2 1 0 0 0</pose>
+
+  <link name="link">
+    <collision name="collision">
+      <geometry>
+        <cylinder>
+          <radius>0.3</radius>  <!-- Radius (m) -->
+          <length>2.0</length>  <!-- Height (m) -->
+        </cylinder>
+      </geometry>
+    </collision>
+
+    <visual name="visual">
+      <geometry>
+        <cylinder>
+          <radius>0.3</radius>
+          <length>2.0</length>
+        </cylinder>
+      </geometry>
+      <material>
+        <ambient>0.8 0.6 0.4 1</ambient>  <!-- Brownish color -->
+        <diffuse>0.8 0.6 0.4 1</diffuse>
+      </material>
+    </visual>
+  </link>
+</model>
+```
+
+### Complex Shapes with Meshes
+
+For detailed models (e.g., furniture, vehicles), use **mesh files** (STL, OBJ, DAE):
+
+```xml
+<visual name="visual">
+  <geometry>
+    <mesh>
+      <uri>file://my_model.dae</uri>  <!-- Collada mesh -->
+      <scale>1 1 1</scale>
+    </mesh>
+  </geometry>
+</visual>
+```
+
+**Best Practice**: Use simplified collision geometries (boxes, cylinders) for physics, detailed meshes for visuals.
+
+## 8.5 Lighting Configuration
+
+Proper lighting is essential for realistic camera/depth sensor simulation and visual aesthetics (Open Robotics, 2023, Lighting in Gazebo documentation).
+
+### Directional Light (Sunlight)
+
+Simulates distant light source (e.g., sun) with parallel rays:
+
+```xml
+<light name="sun" type="directional">
+  <pose>0 0 10 0 0 0</pose>  <!-- Position (mostly irrelevant for directional) -->
+  <diffuse>0.8 0.8 0.8 1</diffuse>   <!-- Main light color (RGBA) -->
+  <specular>0.2 0.2 0.2 1</specular> <!-- Shiny highlights -->
+  <direction>-0.5 0.1 -0.9</direction> <!-- Light direction vector -->
+  <cast_shadows>true</cast_shadows>
+</light>
+```
+
+**Direction vector**: Points from light source toward scene. Example: `(-0.5, 0.1, -0.9)` = light coming from above and slightly to the side.
+
+### Point Light (Lamp)
+
+Emits light in all directions from a point (like a lightbulb):
+
+```xml
+<light name="lamp" type="point">
+  <pose>0 0 3 0 0 0</pose>  <!-- Position: 3m above ground -->
+  <diffuse>1.0 0.9 0.7 1</diffuse>  <!-- Warm white color -->
+  <specular>0.3 0.3 0.3 1</specular>
+  <attenuation>
+    <range>10</range>        <!-- Max light distance (m) -->
+    <constant>0.5</constant> <!-- Constant attenuation factor -->
+    <linear>0.01</linear>    <!-- Linear attenuation -->
+    <quadratic>0.001</quadratic> <!-- Quadratic attenuation -->
+  </attenuation>
+  <cast_shadows>true</cast_shadows>
+</light>
+```
+
+**Attenuation**: Controls how light intensity decreases with distance. Higher values = faster falloff.
+
+### Spot Light (Flashlight)
+
+Directional cone of light:
+
+```xml
+<light name="spotlight" type="spot">
+  <pose>0 0 5 0 1.57 0</pose>  <!-- Position + orientation -->
+  <diffuse>1.0 1.0 1.0 1</diffuse>
+  <specular>0.5 0.5 0.5 1</specular>
+  <direction>0 0 -1</direction>  <!-- Pointing down -->
+  <attenuation>
+    <range>20</range>
+    <linear>0.01</linear>
+    <quadratic>0.001</quadratic>
+  </attenuation>
+  <spot>
+    <inner_angle>0.6</inner_angle>  <!-- Bright cone (radians) -->
+    <outer_angle>1.0</outer_angle>  <!-- Dimmer outer cone -->
+    <falloff>1.0</falloff>          <!-- Edge softness -->
+  </spot>
+  <cast_shadows>true</cast_shadows>
+</light>
+```
+
+### Multiple Lights
+
+Combine multiple lights for realistic indoor/outdoor scenes:
+- Outdoor: 1 directional (sun) + ambient light
+- Indoor: Multiple point lights (ceiling lamps) + ambient
+- Night: Low ambient + focused spot lights
+
+## 8.6 Environmental Plugins
+
+Gazebo supports **plugins** for dynamic environmental effects (wind, fog, moving objects). Plugins are C++ libraries loaded at runtime.
+
+### Wind Plugin (Example)
+
+```xml
+<plugin name="wind" filename="libgazebo_ros_wind.so">
+  <wind_velocity>5.0 0.0 0.0</wind_velocity>  <!-- 5 m/s in X direction -->
+  <wind_variance>1.0</wind_variance>          <!-- Random gusts -->
+</plugin>
+```
+
+**Use case**: Testing drone stability in wind.
+
+### Custom Plugins
+
+Advanced users can write custom C++ plugins for:
+- Moving obstacles (pedestrians, vehicles)
+- Dynamic lighting (day/night cycles)
+- Environmental hazards (fire, smoke)
+
+Plugin development is beyond this module's scope but documented at https://gazebosim.org/docs/fortress/plugins.
+
+## 8.7 Practical Exercise: Navigation Challenge World
+
+**Objective**: Create a custom world with obstacles for testing robot navigation.
+
+### World File: `navigation_challenge.sdf`
+
+```xml
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="navigation_challenge">
+
+    <!-- Physics -->
+    <physics name="default_physics" type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Scene -->
+    <scene>
+      <ambient>0.5 0.5 0.5 1</ambient>
+      <background>0.8 0.9 1.0 1</background>
+    </scene>
+
+    <!-- Lighting -->
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.1 -0.9</direction>
+      <cast_shadows>true</cast_shadows>
+    </light>
+
+    <!-- Ground plane -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <!-- Maze walls (4 box obstacles) -->
+    <model name="wall_1">
+      <static>true</static>
+      <pose>3 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 4.0 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 4.0 1.0</size></box></geometry>
+          <material><ambient>0.6 0.3 0.1 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="wall_2">
+      <static>true</static>
+      <pose>-3 0 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><box><size>0.2 4.0 1.0</size></box></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><box><size>0.2 4.0 1.0</size></box></geometry>
+          <material><ambient>0.6 0.3 0.1 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Cylindrical obstacles -->
+    <model name="pillar_1">
+      <static>true</static>
+      <pose>0 2 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.4</radius><length>1.0</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.4</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.2 0.6 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+    <model name="pillar_2">
+      <static>true</static>
+      <pose>0 -2 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry><cylinder><radius>0.4</radius><length>1.0</length></cylinder></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><cylinder><radius>0.4</radius><length>1.0</length></cylinder></geometry>
+          <material><ambient>0.2 0.6 0.2 1</ambient></material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>
+```
+
+### Testing the World
+
+```bash
+# Save the file as navigation_challenge.sdf
+# Launch Gazebo with the custom world
+gz sim navigation_challenge.sdf
+
+# Spawn your robot (e.g., TurtleBot3) and test navigation
+# The robot should navigate around walls and pillars
+```
+
+**Extension Ideas**:
+- Add more complex mazes with narrow passages
+- Include ramps or stairs (using inclined box geometries)
+- Import furniture models from Gazebo Fuel for indoor scenarios
+- Add moving obstacles using model plugins
+
+---
+
+**Key Takeaways**:
+- SDF world files define complete simulation environments (physics, scene, lights, models)
+- Ground planes use `<plane>` geometry; terrains use `<heightmap>` with grayscale images
+- Import pre-made models from Gazebo Fuel or create custom models with SDF primitives
+- Configure realistic lighting with directional, point, and spot lights
+- Build navigation challenge worlds for testing robot autonomy
+
+Next, we'll explore Unity integration for high-fidelity visualization beyond Gazebo's capabilities.

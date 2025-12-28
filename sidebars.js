@@ -52,7 +52,7 @@ const sidebars = {
         'module-02-digital-twin/gazebo-unity-integration',
         'module-02-digital-twin/sim2real-transfer',
         'module-02-digital-twin/programmatic-control',
-        'module-02-digital-twin/performance-troubleshooting',
+        'module-02-digital-twin/performance-optimization',
         'module-02-digital-twin/conclusion',
       ],
     },

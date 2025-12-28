@@ -3,8 +3,385 @@ id: depth-cameras
 title: "Simulating Depth Cameras"
 sidebar_label: "06: Depth Cameras"
 sidebar_position: 6
+description: "Set up RGB-D cameras in Gazebo with camera intrinsics, depth noise, and PointCloud2 visualization for 3D perception."
+keywords: [depth camera, rgbd, pointcloud, intrinsics, urdf, sdf]
+sources:
+  - "Open Robotics. (2023). Camera sensor. Gazebo. https://gazebosim.org/docs/fortress/sensors#camera"
+  - "Open Robotics. (2023). depth_camera and rgbd_camera sensors. Gazebo. https://gazebosim.org/docs/fortress/sensors#depth-camera"
+  - "Open Source Robotics Foundation. (2023). PointCloud2 message. ROS 2 Humble. https://docs.ros.org/en/humble/p/sensor_msgs/interfaces/msg/PointCloud2.html"
+  - "Open Source Robotics Foundation. (2023). CameraInfo message. ROS 2 Humble. https://docs.ros.org/en/humble/p/sensor_msgs/interfaces/msg/CameraInfo.html"
+learning_objectives:
+  - Understand depth camera technology and applications
+  - Configure depth camera with intrinsic parameters in URDF/SDF
+  - Apply realistic depth image noise artifacts
+  - Visualize PointCloud2 in RViz2 for 3D perception debugging
+prerequisites: ["sensor-simulation-overview"]
+estimated_time: "25 minutes"
 ---
 
 # Simulating Depth Cameras
 
-*This section is under construction. Content will be added in Phase 5.*
+## 6.1 Depth Camera Technology
+
+**Depth cameras** (also called **RGB-D cameras**) capture both color (RGB) and depth (D) information for every pixel. Unlike LiDAR, which measures distances along specific rays, depth cameras produce a **dense depth image**—a 2D grid where each pixel value represents the distance to the corresponding point in 3D space.
+
+### How Depth Cameras Work
+
+There are three main technologies for depth sensing:
+
+1. **Structured Light** (e.g., Microsoft Kinect v1, Intel RealSense D415):
+   - Projects an infrared (IR) pattern onto the scene
+   - Analyzes pattern distortion to calculate depth
+   - **Pros**: High accuracy indoors (±2 mm at 1 m), dense depth maps
+   - **Cons**: Fails in bright sunlight, limited outdoor use
+
+2. **Time-of-Flight (ToF)** (e.g., Microsoft Kinect v2, Azure Kinect):
+   - Emits modulated IR light pulses
+   - Measures phase shift of reflected light to calculate distance
+   - **Pros**: Works at longer ranges (up to 5 m), fewer edge artifacts
+   - **Cons**: Lower resolution than structured light, higher cost
+
+3. **Stereo Vision** (e.g., Intel RealSense D435, ZED cameras):
+   - Uses two cameras to triangulate depth from disparity
+   - **Pros**: No active illumination (works outdoors), low cost
+   - **Cons**: Requires textured surfaces, fails on uniform walls
+
+In robotics, depth cameras are used for:
+- **3D object detection and grasping** (manipulation tasks)
+- **SLAM and navigation** (indoor mobile robots)
+- **Human-robot interaction** (gesture recognition, person tracking)
+
+Gazebo simulates depth cameras using **GPU-accelerated rendering** to produce both RGB images and depth maps (Open Robotics, 2023, depth_camera sensor documentation).
+
+## 6.2 Gazebo Depth Camera Plugin
+
+Gazebo provides two sensor types for depth cameras:
+- **depth_camera**: Publishes depth images (single-channel, each pixel = range in meters)
+- **rgbd_camera**: Publishes both RGB images and depth images (like real RGB-D sensors)
+
+Both sensors use the **depth_camera** plugin, which renders the scene from the camera's perspective and outputs:
+- **RGB image**: `sensor_msgs/msg/Image` (RGB8 encoding)
+- **Depth image**: `sensor_msgs/msg/Image` (float32 encoding, meters)
+- **Point cloud**: `sensor_msgs/msg/PointCloud2` (optional, 3D points with color)
+- **Camera info**: `sensor_msgs/msg/CameraInfo` (intrinsic calibration)
+
+### Basic Depth Camera Configuration (SDF)
+
+```xml
+<sensor name="depth_camera" type="depth_camera">
+  <update_rate>30</update_rate>  <!-- 30 FPS (frames per second) -->
+  <topic>/camera</topic>  <!-- Base topic name -->
+
+  <camera>
+    <horizontal_fov>1.047</horizontal_fov>  <!-- 60 degrees (in radians) -->
+    <image>
+      <width>640</width>  <!-- Image resolution (pixels) -->
+      <height>480</height>
+    </image>
+    <clip>
+      <near>0.1</near>  <!-- Minimum depth range (m) -->
+      <far>10.0</far>   <!-- Maximum depth range (m) -->
+    </clip>
+  </camera>
+</sensor>
+```
+
+**Key Parameters** (Open Robotics, 2023, Camera sensor documentation):
+- **horizontal_fov**: Horizontal field-of-view in radians. Common values: 1.05 rad (60°) for narrow FOV, 1.91 rad (110°) for wide-angle.
+- **width × height**: Image resolution. Standard RGB-D: 640×480 or 848×480 (Intel RealSense).
+- **near / far clip**: Depth range limits. Pixels closer than `near` or farther than `far` report invalid depth (NaN or infinity).
+
+## 6.3 Camera Intrinsics and Distortion Parameters
+
+Real cameras have **intrinsic parameters** that describe how 3D points project onto the 2D image plane. These are represented by the **camera intrinsic matrix** (K-matrix):
+
+```
+K = [fx  0  cx]
+    [ 0 fy  cy]
+    [ 0  0   1]
+```
+
+- **fx, fy**: Focal lengths in pixels (horizontal and vertical). Determines zoom level.
+- **cx, cy**: Principal point (optical center) in pixels. Usually near image center (width/2, height/2).
+
+### Why Intrinsics Matter
+
+When you convert a depth image to a 3D point cloud, you use the intrinsics to "unproject" pixels into 3D space:
+
+```
+X = (u - cx) * depth / fx
+Y = (v - cy) * depth / fy
+Z = depth
+```
+
+where `(u, v)` are pixel coordinates and `(X, Y, Z)` is the 3D point in the camera frame.
+
+### Configuring Intrinsics in Gazebo
+
+Gazebo automatically calculates intrinsics based on `horizontal_fov` and image resolution, but you can override them:
+
+```xml
+<camera>
+  <horizontal_fov>1.047</horizontal_fov>  <!-- 60° FOV -->
+  <image>
+    <width>640</width>
+    <height>480</height>
+  </image>
+  <!-- Explicit intrinsics (optional) -->
+  <intrinsics>
+    <fx>554.25</fx>  <!-- Focal length X (pixels) -->
+    <fy>554.25</fy>  <!-- Focal length Y (pixels) -->
+    <cx>320.5</cx>   <!-- Principal point X (half of width) -->
+    <cy>240.5</cy>   <!-- Principal point Y (half of height) -->
+    <s>0</s>         <!-- Skew (almost always 0) -->
+  </intrinsics>
+  <clip>
+    <near>0.1</near>
+    <far>10.0</far>
+  </clip>
+</camera>
+```
+
+Intrinsics are published on the `/camera/camera_info` topic as `sensor_msgs/msg/CameraInfo` (Open Source Robotics Foundation, 2023, CameraInfo message documentation).
+
+### Lens Distortion
+
+Real cameras have **lens distortion** (radial and tangential). Gazebo supports distortion modeling:
+
+```xml
+<distortion>
+  <k1>-0.05</k1>  <!-- Radial distortion coefficient 1 -->
+  <k2>0.03</k2>   <!-- Radial distortion coefficient 2 -->
+  <k3>0.0</k3>    <!-- Radial distortion coefficient 3 -->
+  <p1>0.0</p1>    <!-- Tangential distortion coefficient 1 -->
+  <p2>0.0</p2>    <!-- Tangential distortion coefficient 2 -->
+</distortion>
+```
+
+For most simulations, you can leave distortion at zero (ideal pinhole camera) unless you're specifically testing distortion-robust algorithms.
+
+## 6.4 Adding Depth Camera to Robot Model
+
+Here's a complete URDF example adding an RGB-D camera to a robot:
+
+```xml
+<?xml version="1.0"?>
+<robot name="robot_with_camera" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Base link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.5 0.3 0.2"/>
+      </geometry>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.5 0.3 0.2"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10.0"/>
+      <inertia ixx="0.1" iyy="0.1" izz="0.1" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- Camera link -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.025 0.1 0.025"/>  <!-- Small box representing camera -->
+      </geometry>
+      <material name="blue"/>
+    </visual>
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="0.00001" iyy="0.00001" izz="0.00001" ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- Joint connecting base to camera -->
+  <joint name="camera_joint" type="fixed">
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+    <origin xyz="0.25 0 0.12" rpy="0 0 0"/>  <!-- Mount camera on front of robot -->
+  </joint>
+
+  <!-- Gazebo depth camera sensor -->
+  <gazebo reference="camera_link">
+    <sensor name="rgbd_camera" type="depth_camera">
+      <update_rate>30</update_rate>
+      <topic>/camera</topic>
+
+      <camera>
+        <horizontal_fov>1.047</horizontal_fov>  <!-- 60° FOV -->
+        <image>
+          <width>640</width>
+          <height>480</height>
+          <format>R8G8B8</format>  <!-- RGB image format -->
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>5.0</far>
+        </clip>
+        <!-- Add realistic depth noise (see Section 6.5) -->
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.005</stddev>  <!-- 5 mm depth noise -->
+        </noise>
+      </camera>
+    </sensor>
+  </gazebo>
+
+</robot>
+```
+
+### Published Topics
+
+This camera publishes to (assuming bridge is configured):
+- `/camera/image_raw` — RGB image (`sensor_msgs/msg/Image`)
+- `/camera/depth` — Depth image (`sensor_msgs/msg/Image`, float32)
+- `/camera/points` — Point cloud (`sensor_msgs/msg/PointCloud2`)
+- `/camera/camera_info` — Intrinsic calibration (`sensor_msgs/msg/CameraInfo`)
+
+## 6.5 Depth Image Noise and Artifacts
+
+Real depth cameras exhibit several types of noise and artifacts:
+
+### 1. Gaussian Range Noise
+Depth measurements have random errors, typically increasing with distance. For structured light cameras (Intel RealSense D415), noise is ~1-2% of distance.
+
+**Example**: At 1 m range, stddev = 0.01 m (1 cm). At 3 m, stddev = 0.03 m (3 cm).
+
+```xml
+<noise>
+  <type>gaussian</type>
+  <mean>0.0</mean>
+  <stddev>0.01</stddev>  <!-- 1 cm base noise -->
+</noise>
+```
+
+### 2. Missing Depth Values
+Depth cameras fail to measure depth on:
+- **Reflective surfaces** (mirrors, polished metal)
+- **Black or dark surfaces** (absorb IR light)
+- **Transparent surfaces** (glass, water)
+- **Edges and occlusions** (sudden depth discontinuities)
+
+In simulation, these are represented as **NaN** (not-a-number) or **inf** (infinity) in the depth image.
+
+### 3. Flying Pixels
+At depth discontinuities (edges of objects), some pixels may report incorrect intermediate depths—called **flying pixels**. These are artifacts of stereo matching or structured light reconstruction.
+
+Gazebo's depth camera plugin does not automatically simulate flying pixels, but you can add them via post-processing if needed for realism.
+
+## 6.6 Visualizing PointCloud2 Data in RViz2
+
+RViz2 can visualize 3D point clouds from depth cameras.
+
+### Step 1: Launch RViz2
+
+```bash
+rviz2
+```
+
+### Step 2: Configure PointCloud2 Display
+
+1. **Set Fixed Frame**: `camera_link` or `base_link`
+2. **Add PointCloud2**:
+   - Click **Add** → Select **By topic** → `/camera/points` → **PointCloud2**
+3. **Configure Display**:
+   - **Size**: 0.01 (1 cm point size)
+   - **Style**: Points or Flat Squares
+   - **Color Transformer**: RGB8 (shows color from RGB image) or Intensity
+
+### Step 3: Verify Point Cloud
+
+Move the robot or obstacles in Gazebo. The point cloud should update, showing 3D structure with color overlays.
+
+**Common Issues**:
+- **No points visible**: Check `/camera/points` topic is publishing (`ros2 topic hz /camera/points`)
+- **Points at wrong location**: Verify `camera_link` transform is correct in URDF (`<origin>` in joint)
+- **Black points**: Ensure `format` in camera config is `R8G8B8` for color
+
+## 6.7 Practical Exercise: Depth Thresholding for Obstacle Detection
+
+**Objective**: Detect obstacles within 1 meter by analyzing the depth image.
+
+### ROS 2 Node (Python):
+
+```python
+import rclpy
+from rclpy.node import Node
+from sensor_msgs.msg import Image
+import numpy as np
+from cv_bridge import CvBridge
+
+class DepthObstacleDetector(Node):
+    def __init__(self):
+        super().__init__('depth_obstacle_detector')
+        self.subscription = self.create_subscription(
+            Image,
+            '/camera/depth',
+            self.depth_callback,
+            10
+        )
+        self.bridge = CvBridge()
+        self.get_logger().info('Depth obstacle detector started')
+
+    def depth_callback(self, msg):
+        # Convert ROS Image to NumPy array (float32, meters)
+        depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='32FC1')
+
+        # Count pixels closer than 1 meter (ignoring NaN/inf)
+        valid_depth = depth_image[np.isfinite(depth_image)]
+        close_pixels = np.sum(valid_depth < 1.0)
+
+        total_pixels = valid_depth.size
+        percentage = (close_pixels / total_pixels) * 100 if total_pixels > 0 else 0
+
+        if percentage > 10:  # If >10% of pixels are < 1m
+            self.get_logger().warn(f'Obstacle detected! {percentage:.1f}% of pixels < 1m')
+        else:
+            self.get_logger().info(f'Clear ({percentage:.1f}% < 1m)')
+
+def main():
+    rclpy.init()
+    node = DepthObstacleDetector()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()
+```
+
+### Test the Exercise:
+
+```bash
+# Install cv_bridge (if not already installed)
+sudo apt install ros-humble-cv-bridge
+
+# Terminal 1: Launch Gazebo with robot
+ros2 launch my_robot_description robot.launch.py
+
+# Terminal 2: Run depth obstacle detector
+ros2 run my_robot_package depth_obstacle_detector
+
+# Terminal 3: Visualize point cloud in RViz2
+rviz2
+
+# In Gazebo, move obstacles toward the camera and observe warnings
+```
+
+---
+
+**Key Takeaways**:
+- Depth cameras provide dense 3D perception by outputting depth images and point clouds
+- Configure intrinsic parameters (fx, fy, cx, cy) to match real camera calibration
+- Add Gaussian noise (~1% of range) to simulate realistic depth uncertainty
+- Visualize PointCloud2 in RViz2 with RGB color overlay for debugging
+- Depth cameras complement LiDAR for close-range 3D perception and manipulation
+
+Next, we'll configure IMU sensors for robot state estimation.

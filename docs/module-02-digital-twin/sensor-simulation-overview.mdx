@@ -3,8 +3,190 @@ id: sensor-simulation-overview
 title: "Sensor Simulation Overview"
 sidebar_label: "04: Sensor Overview"
 sidebar_position: 4
+description: "Learn sensor simulation principles, Gazebo's plugin architecture, noise models, and ROS 2 topic publication for perception testing."
+keywords: [sensors, plugins, noise, lidar, camera, imu, rviz2]
+sources:
+  - "Open Robotics. (2023). Sensors. Gazebo. https://gazebosim.org/docs/fortress/sensors"
+  - "Open Robotics. (2023). Sensor plugins. Gazebo. https://gazebosim.org/docs/fortress/understanding_sensors"
+  - "Open Source Robotics Foundation. (2023). sensor_msgs package. ROS 2 Humble. https://docs.ros.org/en/humble/p/sensor_msgs/"
+  - "Open Robotics. (2023). Sensor noise models. Gazebo. https://gazebosim.org/api/sensors/7/namespaceignition_1_1sensors.html"
+learning_objectives:
+  - Explain why sensor simulation is critical for robotics development
+  - Understand Gazebo's sensor plugin architecture
+  - Describe sensor noise models (Gaussian, uniform)
+  - Connect simulated sensor topics to RViz2 for visualization
+prerequisites: ["physics-simulation"]
+estimated_time: "15 minutes"
 ---
 
 # Sensor Simulation Overview
 
-*This section is under construction. Content will be added in Phase 5.*
+## 4.1 Why Simulate Sensors?
+
+In robotics, **perception** is the foundation for intelligent decision-making. Robots rely on sensors—LiDAR, cameras, IMUs, GPS, and more—to perceive their environment and estimate their own state. However, developing perception algorithms directly on hardware presents several challenges:
+
+1. **Hardware Cost**: High-quality sensors like 3D LiDAR units can cost thousands of dollars. Prototyping multiple sensor configurations on physical robots is prohibitively expensive.
+2. **Safety Risks**: Testing perception algorithms in real-world scenarios (e.g., obstacle avoidance near humans, navigation in crowded spaces) poses safety risks during early development stages.
+3. **Limited Reproducibility**: Real-world sensor data varies with environmental conditions (lighting, weather, surface reflectivity). Debugging failures requires recreating exact conditions, which is often impossible.
+4. **Slow Iteration Cycles**: Deploying code to hardware, running tests, and collecting data takes time. Simulation enables rapid iteration with instant resets and reproducible scenarios.
+
+Gazebo's sensor simulation addresses these challenges by providing **virtual sensors** that mimic the behavior of real hardware (Open Robotics, 2023, Sensors section). Simulated sensors publish data to ROS 2 topics in the same message formats as physical sensors, allowing you to develop and test perception pipelines entirely in simulation before deploying to real robots. This workflow, known as **algorithm-in-the-loop (AIL) testing**, drastically accelerates development while reducing costs and risks.
+
+## 4.2 Gazebo Sensor Plugin Architecture
+
+Gazebo uses a **plugin-based architecture** to simulate sensors (Open Robotics, 2023, Understanding Sensors section). Each sensor type (LiDAR, camera, IMU) is implemented as a **sensor plugin** that integrates with Gazebo's physics engine and rendering pipeline. The architecture consists of three layers:
+
+### Layer 1: Sensor Definition (SDF/URDF)
+You define sensors in your robot model's URDF or world SDF file using `<sensor>` tags. Each sensor specifies:
+- **Sensor type** (e.g., `gpu_lidar`, `camera`, `imu`)
+- **Parent link** (where the sensor is attached on the robot)
+- **Update rate** (Hz, how often the sensor publishes data)
+- **Physical parameters** (e.g., LiDAR range, camera resolution)
+
+### Layer 2: Sensor Plugin Execution
+When Gazebo loads the world, it instantiates sensor plugins attached to robot links. At each simulation step, the plugin:
+1. **Queries the physics engine** for the sensor's world pose (position + orientation)
+2. **Generates synthetic data** (e.g., ray casting for LiDAR, rendering for cameras)
+3. **Applies noise models** (Gaussian, uniform, or custom noise distributions)
+4. **Publishes data** to Gazebo's internal transport layer
+
+### Layer 3: ROS 2 Bridge
+The `ros_gz_bridge` (covered in Section 02) subscribes to Gazebo sensor topics and republishes them as ROS 2 topics using standard message types from the `sensor_msgs` package (Open Source Robotics Foundation, 2023, sensor_msgs documentation). For example:
+- Gazebo `ignition.msgs.LaserScan` → ROS 2 `sensor_msgs/msg/LaserScan`
+- Gazebo `ignition.msgs.Image` → ROS 2 `sensor_msgs/msg/Image`
+- Gazebo `ignition.msgs.Imu` → ROS 2 `sensor_msgs/msg/Imu`
+
+This three-layer design ensures that **your ROS 2 perception nodes cannot distinguish between simulated and real sensor data**, enabling seamless sim-to-real transfer.
+
+## 4.3 Sensor Types Available
+
+Gazebo Fortress supports the following sensor types out-of-the-box (Open Robotics, 2023, Sensors section):
+
+| Sensor Type | Plugin Name | ROS 2 Message Type | Use Case |
+|-------------|-------------|-------------------|----------|
+| **2D LiDAR** | `gpu_lidar` | `sensor_msgs/msg/LaserScan` | 2D obstacle detection, SLAM |
+| **3D LiDAR** | `gpu_lidar` | `sensor_msgs/msg/PointCloud2` | 3D mapping, object detection |
+| **RGB Camera** | `camera` | `sensor_msgs/msg/Image` | Visual perception, object recognition |
+| **Depth Camera** | `depth_camera` or `rgbd_camera` | `sensor_msgs/msg/Image` (depth), `sensor_msgs/msg/PointCloud2` | 3D reconstruction, SLAM |
+| **IMU** | `imu` | `sensor_msgs/msg/Imu` | Orientation estimation, sensor fusion |
+| **GPS** | `navsat` | `sensor_msgs/msg/NavSatFix` | Outdoor localization |
+| **Contact Sensor** | `contact` | Custom message | Collision detection, tactile sensing |
+| **Force-Torque Sensor** | `force_torque` | `geometry_msgs/msg/WrenchStamped` | Manipulation, gripper force control |
+
+For Physical AI applications, the **most critical sensors** are LiDAR (for spatial awareness), depth cameras (for 3D perception), and IMUs (for state estimation). Sections 05-07 will dive deep into configuring and using these three sensor types.
+
+## 4.4 Sensor Noise Models
+
+Real-world sensors are **noisy**. LiDAR measurements have range errors due to reflectivity variations, cameras suffer from motion blur and lens distortion, and IMUs drift over time. If you train perception algorithms on **perfect, noise-free simulation data**, they will fail catastrophically when deployed to real hardware—a phenomenon known as the **reality gap**.
+
+Gazebo provides built-in **noise models** to inject realistic uncertainty into sensor data (Open Robotics, 2023, Sensor Noise Models documentation). The two most common noise types are:
+
+### Gaussian Noise
+Gaussian (normal) noise models random errors centered around a mean with a specified standard deviation. This is the most common noise model for sensor measurements.
+
+**SDF Configuration Example**:
+```xml
+<noise type="gaussian">
+  <mean>0.0</mean>
+  <stddev>0.01</stddev>  <!-- 1 cm standard deviation for LiDAR range -->
+</noise>
+```
+
+**When to Use**: LiDAR range errors, camera pixel noise, IMU accelerometer/gyroscope bias.
+
+### Uniform Noise
+Uniform noise models errors distributed evenly across a range `[min, max]`. This is less realistic but useful for stress-testing algorithms.
+
+**SDF Configuration Example**:
+```xml
+<noise type="uniform">
+  <min>-0.02</min>  <!-- -2 cm -->
+  <max>0.02</max>   <!-- +2 cm -->
+</noise>
+```
+
+**When to Use**: Simulating worst-case sensor errors, testing robustness.
+
+### Custom Noise Models
+You can also implement **custom noise plugins** for advanced effects like:
+- **Temporal correlation** (sensor drift over time)
+- **Outliers** (occasional large errors, e.g., LiDAR reflections on glass)
+- **Systematic bias** (IMU bias that changes with temperature)
+
+Sections 05-07 will show you exactly how to configure noise for each sensor type and validate that it matches real-world sensor characteristics.
+
+## 4.5 ROS 2 Topic Publication from Sensors
+
+Simulated sensors in Gazebo publish data to **Gazebo Transport topics** (using Ignition Messages format). To use this data in ROS 2 applications, you must configure the `ros_gz_bridge` to translate topics (Open Source Robotics Foundation, 2023, sensor_msgs documentation).
+
+**Example Bridge Configuration (YAML)**:
+```yaml
+# sensor_bridge.yaml
+- ros_topic_name: "/scan"
+  gz_topic_name: "/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "ignition.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/camera/image_raw"
+  gz_topic_name: "/camera/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "ignition.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/imu/data"
+  gz_topic_name: "/imu/data"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "ignition.msgs.Imu"
+  direction: GZ_TO_ROS
+```
+
+**Launching the Bridge**:
+```bash
+ros2 run ros_gz_bridge parameter_bridge --ros-args -p config_file:=sensor_bridge.yaml
+```
+
+Once the bridge is running, you can verify sensor topics are publishing:
+```bash
+ros2 topic list
+# Expected output:
+# /scan
+# /camera/image_raw
+# /imu/data
+
+ros2 topic hz /scan
+# Expected output: "average rate: 10.000" (matches sensor update_rate)
+```
+
+This workflow ensures that **all ROS 2 nodes subscribe to sensor data exactly as they would with real hardware**, enabling true algorithm-in-the-loop testing.
+
+## 4.6 Visualizing Sensor Data in RViz2
+
+RViz2 is ROS 2's 3D visualization tool (introduced in Module 1, Section 06). It provides specialized display types for sensor data:
+
+- **LaserScan**: Visualizes 2D LiDAR scans as colored points (red = obstacles, green = free space)
+- **PointCloud2**: Renders 3D LiDAR point clouds with color-coded intensities
+- **Image**: Displays camera images in real-time (RGB, depth, or both)
+- **Imu**: Shows IMU orientation as a 3D coordinate frame
+
+**Quick RViz2 Launch**:
+```bash
+rviz2
+```
+
+In RViz2:
+1. Set **Fixed Frame** to `base_link` (or your robot's base frame)
+2. Click **Add** → Select display type (e.g., `LaserScan`)
+3. Set **Topic** to the sensor topic (e.g., `/scan`)
+
+Sections 05-07 will include detailed RViz2 visualization tutorials with screenshots for each sensor type.
+
+---
+
+**Key Takeaways**:
+- Sensor simulation enables safe, cost-effective perception algorithm development
+- Gazebo's plugin architecture seamlessly integrates with ROS 2 via `ros_gz_bridge`
+- Noise models (Gaussian, uniform) are essential for closing the sim-to-real gap
+- RViz2 provides real-time visualization for debugging sensor data
+
+Next, we'll configure our first sensor: LiDAR.
